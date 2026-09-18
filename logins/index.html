@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AquaGuard — Log In</title>
+<link rel="stylesheet" href="../styles/index.css" />
+</head>
+<body>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+
+    <div class="brand">
+      <div class="brand-icon">💧</div>
+      <h1>AquaGuard</h1>
+      <p class="tagline">Smart Water Leak &amp; Flow Controller</p>
+    </div>
+
+    <!-- Tab switcher -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="signin">Log In</button>
+      <button class="tab-btn" data-tab="signup">Sign Up</button>
+    </div>
+
+    <!-- Status banner for errors / success messages -->
+    <div id="status-banner" class="status-banner hidden"></div>
+
+    <div class="forms-window" aria-live="polite">
+      <div class="forms-track">
+        <!-- ============ SIGN IN FORM ============ -->
+        <form id="signin-form" class="auth-form active">
+      <label for="signin-email">Email Address</label>
+      <input type="email" id="signin-email" placeholder="you@homeowner.net" required autocomplete="email" />
+
+      <label for="signin-password">Password</label>
+      <div class="password-field">
+        <input type="password" id="signin-password" placeholder="••••••••••••" required autocomplete="current-password" />
+        <button type="button" class="toggle-pw" data-target="signin-password">show</button>
+      </div>
+
+      <a href="#" class="forgot-link" id="forgot-password-link">Forgot password?</a>
+
+      <button type="submit" class="btn-primary" id="signin-btn">
+        <span class="btn-label">Secure Sign In</span>
+        <span class="spinner hidden"></span>
+      </button>
+
+      <p class="switch-line">Don't have an account? <a href="#" data-tab-link="signup">Sign Up</a></p>
+      </form>
+
+      <!-- ============ SIGN UP FORM ============ -->
+      <form id="signup-form" class="auth-form">
+      <label for="signup-name">Full Name</label>
+      <input type="text" id="signup-name" placeholder="Joshua Miller" required autocomplete="name" />
+
+      <label for="signup-email">Email Address</label>
+      <input type="email" id="signup-email" placeholder="you@homeowner.net" required autocomplete="email" />
+
+      <label for="signup-phone">Phone Number <span class="optional">(optional)</span></label>
+      <input type="tel" id="signup-phone" placeholder="+254 7XX XXX XXX" autocomplete="tel" />
+
+      <label for="signup-role">I am a</label>
+      <select id="signup-role">
+        <option value="HomeOwner">Home Owner</option>
+        <option value="WSP">Water Service Provider (WSP)</option>
+      </select>
+
+      <label for="signup-password">Password</label>
+      <div class="password-field">
+        <input type="password" id="signup-password" placeholder="At least 8 characters" required minlength="8" autocomplete="new-password" />
+        <button type="button" class="toggle-pw" data-target="signup-password">show</button>
+      </div>
+
+      <label for="signup-confirm-password">Confirm Password</label>
+      <div class="password-field">
+        <input type="password" id="signup-confirm-password" placeholder="Re-enter your password" required minlength="8" autocomplete="new-password" />
+        <button type="button" class="toggle-pw" data-target="signup-confirm-password">show</button>
+      </div>
+
+      <button type="submit" class="btn-primary" id="signup-btn">
+        <span class="btn-label">Create Account</span>
+        <span class="spinner hidden"></span>
+      </button>
+
+      <p class="switch-line">Already have an account? <a href="#" data-tab-link="signin">Log In</a></p>
+        </form>
+      </div>
+    </div>
+
+    <p class="footnote">Secured by Supabase. Your credentials never travel unsafe.</p>
+  </div>
+</div>
+
+<!-- Supabase JS client (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../javascript/auth.js"></script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AquaGuard — Dashboard</title>
+<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="../styles/dashboard.css" />
+</head>
+<body class="dashboard-body">
+
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="brand-icon-sm">💧</span> AquaGuard
+  </div>
+  <button id="signout-btn" class="btn-ghost">Sign Out</button>
+</header>
+
+<main id="app-root" class="app-root">
+  <!-- Loading state -->
+  <div id="loading-state" class="center-msg">
+    <span class="spinner-lg"></span>
+    <p>Loading your account…</p>
+  </div>
+</main>
+
+<!-- ============ TEMPLATE: PAIRING SCREEN ============ -->
+<template id="pairing-template">
+  <div class="pairing-card">
+    <h2>Pair New Device</h2>
+    <p class="muted">Power on your AquaGuard device and enter the code shown on its display or serial output.</p>
+
+    <div id="pairing-banner" class="status-banner hidden"></div>
+
+    <form id="pairing-form" class="pairing-form">
+      <div class="code-inputs" id="code-inputs">
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+      </div>
+
+      <button type="submit" class="btn-primary" id="pair-btn">
+        <span class="btn-label">Provision &amp; Connect</span>
+        <span class="spinner hidden"></span>
+      </button>
+    </form>
+  </div>
+</template>
+
+<!-- ============ TEMPLATE: DASHBOARD SCREEN ============ -->
+<template id="dashboard-template">
+  <div class="dash-grid">
+
+    <div id="alert-banner" class="alert-banner hidden"></div>
+
+    <div class="device-header">
+      <div>
+        <h2 id="device-title">Pipe #—</h2>
+        <p class="muted" id="device-subtitle">Sensor ID —</p>
+      </div>
+      <span id="online-badge" class="badge">● Checking…</span>
+    </div>
+
+    <div class="gauge-card">
+      <div class="gauge-wrap">
+        <canvas id="gauge-canvas" width="220" height="130"></canvas>
+        <div class="gauge-readout">
+          <span id="gauge-value">—</span>
+          <span class="gauge-unit">PSI</span>
+        </div>
+      </div>
+      <div class="led-strip" id="led-strip">
+        <span class="led"></span><span class="led"></span><span class="led"></span><span class="led"></span><span class="led"></span>
+      </div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-card">
+        <p class="stat-label">Peak (Max)</p>
+        <p class="stat-value stat-red" id="stat-peak">—</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">Baseline (Min)</p>
+        <p class="stat-value stat-green" id="stat-baseline">—</p>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <p class="stat-label">24H Pressure Analytics</p>
+      <canvas id="history-chart" height="90"></canvas>
+    </div>
+
+  </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="../javascript/dashboard.js"></script>
+</body>
+</html>
