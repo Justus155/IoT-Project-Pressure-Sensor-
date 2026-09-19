@@ -109,11 +109,18 @@ forms.signup.addEventListener('submit', async (event) => {
   const fullName = document.querySelector('#signup-name').value.trim();
   const phone = document.querySelector('#signup-phone').value.trim();
   const role = document.querySelector('#signup-role').value;
+
   const { data, error } = await supabaseClient.auth.signUp({
     email,
     password,
     options: {
+      // Explicitly pin the confirmation link to this exact page,
+      // regardless of what "Site URL" is set to in the Supabase
+      // dashboard. window.location here is index.html itself, since
+      // that's where the sign-up form lives.
+      emailRedirectTo: window.location.origin + window.location.pathname,
       data: {
+        name: fullName,
         full_name: fullName,
         phone,
         role
@@ -121,10 +128,36 @@ forms.signup.addEventListener('submit', async (event) => {
     }
   });
 
+  if (error) {
+    setFormLoading(forms.signup, false);
+    showStatus(error.message, 'error');
+    return;
+  }
+
+  // Create the profile row ourselves instead of relying on a database
+  // trigger. This runs client-side, so any failure here shows up
+  // directly in the browser console (F12) instead of being buried in
+  // Postgres logs behind a generic "Database error saving new user".
+  const { error: profileError } = await supabaseClient
+    .from('profiles')
+    .upsert(
+      {
+        id: data.user.id,
+        name: fullName,
+        phone: phone || null,
+        role: role === 'WSP' ? 'WSP' : role === 'Admin' ? 'Admin' : 'HomeOwner'
+      },
+      { onConflict: 'id' }
+    );
+
   setFormLoading(forms.signup, false);
 
-  if (error) {
-    showStatus(error.message, 'error');
+  if (profileError) {
+    console.error('Profile creation failed:', profileError);
+    showStatus(
+      'Account created, but saving your profile failed. Open the browser console (F12) for details.',
+      'error'
+    );
     return;
   }
 
@@ -143,3 +176,36 @@ window.addEventListener('resize', () => {
 });
 
 switchTab(window.location.hash === '#signup' ? 'signup' : 'signin', false);
+
+// ============================================================
+// Handle landing here via an email confirmation link.
+// Supabase automatically creates a session when the confirmation
+// link is clicked — but we want the person to land on the sign-in
+// FORM, not be silently logged straight into the dashboard. So: if
+// the URL shows clear signs of being a confirmation redirect, sign
+// them back out, clean up the URL, and show a message instead.
+// ============================================================
+(async function handleEmailConfirmationRedirect() {
+  const searchParams = new URLSearchParams(window.location.search);
+  const hash = window.location.hash;
+
+  const looksLikeConfirmation =
+    hash.includes('type=signup') ||
+    hash.includes('access_token') ||
+    searchParams.get('type') === 'signup' ||
+    searchParams.has('code');
+
+  if (!looksLikeConfirmation) return;
+
+  const { data } = await supabaseClient.auth.getSession();
+  if (data.session) {
+    await supabaseClient.auth.signOut();
+  }
+
+  // Strip the confirmation tokens out of the address bar so a
+  // refresh doesn't re-trigger this, and so the URL looks clean.
+  history.replaceState(null, '', window.location.pathname);
+
+  switchTab('signin', false);
+  showStatus('Email confirmed! Please sign in to continue.', 'success');
+})();
