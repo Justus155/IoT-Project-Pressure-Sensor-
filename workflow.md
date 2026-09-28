@@ -42,7 +42,7 @@ Open this in VS Code and check items off (`[ ]` → `[x]`) as you go — the Mar
 - [ ] Build **Alerts page** (list view, matches "Incident Room" wireframe) — reads from `alerts` table, lets user mark alerts as read
 - [ ] Build **Settings page** (matches "Control Hub" wireframe) — edit profile, view device info, sign out
 - [ ] Build **WSP Fleet Overview page** — table of all devices a WSP manages, reusing `dashboard.html` as the per-device drill-down (see note at bottom of `dashboard.js`)
-- [ ] Add a `reset-password.html` page (the "Forgot password" email link currently points to a page that doesn't exist yet)
+- [x] Add a `reset-password.html` page (the "Forgot password" email link currently points to a page that doesn't exist yet)
 - [ ] Move the duplicated Supabase keys in `auth.js`/`dashboard.js` into one shared `config.js` once there are 3+ pages, to avoid updating keys in multiple places
 
 ---

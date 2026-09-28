@@ -39,7 +39,7 @@
         <button type="button" class="toggle-pw" data-target="signin-password">show</button>
       </div>
 
-      <a href="#" class="forgot-link" id="forgot-password-link">Forgot password?</a>
+      <a href="#" class="forgot-link" id="forgot-password-link" data-tab-link="forgot">Forgot password?</a>
 
       <button type="submit" class="btn-primary" id="signin-btn">
         <span class="btn-label">Secure Sign In</span>
@@ -85,6 +85,21 @@
 
       <p class="switch-line">Already have an account? <a href="#" data-tab-link="signin">Log In</a></p>
         </form>
+
+      <!-- ============ FORGOT PASSWORD FORM ============ -->
+      <form id="forgot-form" class="auth-form">
+      <p class="form-intro">Enter the email address linked to your account and we'll send you a link to reset your password.</p>
+
+      <label for="forgot-email">Email Address</label>
+      <input type="email" id="forgot-email" placeholder="you@homeowner.net" required autocomplete="email" />
+
+      <button type="submit" class="btn-primary" id="forgot-btn">
+        <span class="btn-label">Send Reset Link</span>
+        <span class="spinner hidden"></span>
+      </button>
+
+      <p class="switch-line">Remembered it? <a href="#" data-tab-link="signin">Back to Log In</a></p>
+      </form>
       </div>
     </div>
 

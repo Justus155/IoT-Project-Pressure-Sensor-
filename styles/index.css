@@ -124,13 +124,13 @@ body {
 .forms-track {
   display: flex;
   align-items: flex-start;
-  width: 200%;
+  width: 300%;
   transition: transform 0.35s ease;
 }
 
 .auth-form {
   display: flex;
-  flex: 0 0 50%;
+  flex: 0 0 calc(100% / 3);
   flex-direction: column;
   min-width: 0;
 }
@@ -150,6 +150,13 @@ body {
 .auth-form label:first-of-type { margin-top: 0; }
 
 .optional { font-weight: 400; color: #5d7690; }
+
+.form-intro {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
 
 .auth-form input,
 .auth-form select {

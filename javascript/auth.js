@@ -8,8 +8,10 @@ const formsTrack = document.querySelector('.forms-track');
 const formsWindow = document.querySelector('.forms-window');
 const forms = {
   signin: document.querySelector('#signin-form'),
-  signup: document.querySelector('#signup-form')
+  signup: document.querySelector('#signup-form'),
+  forgot: document.querySelector('#forgot-form')
 };
+const formOrder = ['signin', 'signup', 'forgot'];
 const statusBanner = document.querySelector('#status-banner');
 
 function showStatus(message, type) {
@@ -29,25 +31,28 @@ function goToDashboard() {
 }
 
 function switchTab(tabName, updateUrl = true) {
-  const selectedForm = forms[tabName] || forms.signin;
-  const isSignUp = selectedForm === forms.signup;
+  const activeName = formOrder.includes(tabName) ? tabName : 'signin';
+  const selectedForm = forms[activeName];
+  const offset = (formOrder.indexOf(activeName) * 100) / formOrder.length;
 
-  formsTrack.style.transform = isSignUp ? 'translateX(-50%)' : 'translateX(0)';
+  formsTrack.style.transform = `translateX(-${offset}%)`;
   formsWindow.style.height = `${selectedForm.scrollHeight}px`;
 
   Object.entries(forms).forEach(([name, form]) => {
-    form.classList.toggle('active', name === (isSignUp ? 'signup' : 'signin'));
-    form.setAttribute('aria-hidden', name === (isSignUp ? 'signup' : 'signin') ? 'false' : 'true');
+    form.classList.toggle('active', name === activeName);
+    form.setAttribute('aria-hidden', name === activeName ? 'false' : 'true');
   });
 
+  // The forgot form has no tab of its own, so keep "Log In" highlighted.
+  const activeTab = activeName === 'signup' ? 'signup' : 'signin';
   tabButtons.forEach((button) => {
-    const isActive = button.dataset.tab === (isSignUp ? 'signup' : 'signin');
+    const isActive = button.dataset.tab === activeTab;
     button.classList.toggle('active', isActive);
     button.setAttribute('aria-selected', String(isActive));
   });
 
   if (updateUrl) {
-    history.replaceState(null, '', `#${isSignUp ? 'signup' : 'signin'}`);
+    history.replaceState(null, '', `#${activeName}`);
   }
 }
 
@@ -175,7 +180,47 @@ window.addEventListener('resize', () => {
   if (activeForm) formsWindow.style.height = `${activeForm.scrollHeight}px`;
 });
 
-switchTab(window.location.hash === '#signup' ? 'signup' : 'signin', false);
+forms.forgot.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  showStatus('', 'hidden');
+  setFormLoading(forms.forgot, true);
+
+  const email = document.querySelector('#forgot-email').value.trim();
+  const { data: exists, error: lookupError } = await supabaseClient.rpc('email_exists', { p_email: email });
+
+  if (lookupError) {
+    setFormLoading(forms.forgot, false);
+    console.error('Email lookup failed:', lookupError);
+    showStatus('Could not verify that email right now. Please try again.', 'error');
+    return;
+  }
+
+  if (!exists) {
+    setFormLoading(forms.forgot, false);
+    showStatus('No account exists with that email address.', 'error');
+    return;
+  }
+
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: new URL('reset-password.html', window.location.href).href
+  });
+
+  setFormLoading(forms.forgot, false);
+
+  if (error) {
+    showStatus(error.message, 'error');
+    return;
+  }
+
+  showStatus('Reset link sent. Check your email and follow the link to set a new password.', 'success');
+});
+
+switchTab(window.location.hash.slice(1), false);
+
+if (new URLSearchParams(window.location.search).get('reset') === 'success') {
+  history.replaceState(null, '', window.location.pathname);
+  showStatus('Password updated. Sign in with your new password.', 'success');
+}
 
 // ============================================================
 // Handle landing here via an email confirmation link.
