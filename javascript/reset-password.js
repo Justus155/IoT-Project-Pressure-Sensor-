@@ -26,22 +26,58 @@ document.querySelectorAll('.toggle-pw').forEach((button) => {
   });
 });
 
+// ------------------------------------------------------------
+// Decide whether to show the form or an "invalid link" message
+// ------------------------------------------------------------
+let formShown = false;
+
+function showForm() {
+  if (formShown) return;
+  formShown = true;
+  showStatus('', 'hidden');
+  form.classList.remove('hidden');
+  // Remove the recovery tokens from the address bar. The session has
+  // already been stored by supabase-js at this point.
+  history.replaceState(null, '', window.location.pathname);
+}
+
+function showInvalidLink() {
+  if (formShown) return;
+  showStatus(
+    'This reset link is invalid or has expired. Go back to Log In and request a new one.',
+    'error'
+  );
+}
+
+// Fires when supabase-js reads a recovery token out of the URL.
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (event === 'PASSWORD_RECOVERY' && session) showForm();
+});
+
 (async function init() {
-  const linkError = new URLSearchParams(window.location.hash.slice(1)).get('error')
-    || new URLSearchParams(window.location.search).get('error');
+  const hashParams = new URLSearchParams(window.location.hash.slice(1));
+  const queryParams = new URLSearchParams(window.location.search);
 
-  // getSession() waits for the client to finish reading the recovery token from the URL.
-  const { data } = await supabaseClient.auth.getSession();
-
-  if (linkError || !data.session) {
-    showStatus('This reset link is invalid or has expired. Please request a new one from the log in page.', 'error');
+  // Supabase reports expired/used links as error=... in the URL.
+  if (hashParams.get('error') || queryParams.get('error')) {
+    showInvalidLink();
     return;
   }
 
-  history.replaceState(null, '', window.location.pathname);
-  form.classList.remove('hidden');
+  // getSession() waits for the client to finish processing the URL.
+  const { data } = await supabaseClient.auth.getSession();
+  if (data.session) {
+    showForm();
+    return;
+  }
+
+  // Short grace period in case the recovery event lands just after.
+  setTimeout(showInvalidLink, 1500);
 })();
 
+// ------------------------------------------------------------
+// Submit new password
+// ------------------------------------------------------------
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   showStatus('', 'hidden');
@@ -59,10 +95,19 @@ form.addEventListener('submit', async (event) => {
 
   if (error) {
     setFormLoading(false);
-    showStatus(error.message, 'error');
+    console.error('Password update failed:', error);
+
+    if (/session/i.test(error.message)) {
+      showStatus('Your reset session has expired. Go back to Log In and request a new link.', 'error');
+    } else if (/different from the old password/i.test(error.message)) {
+      showStatus('Choose a password you have not used before.', 'error');
+    } else {
+      showStatus(error.message, 'error');
+    }
     return;
   }
 
+  // End the temporary recovery session so they log in with the new password.
   await supabaseClient.auth.signOut();
   window.location.href = 'index.html?reset=success#signin';
 });
