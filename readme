@@ -1,0 +1,99 @@
+# AquaGuard
+
+## Overview
+
+AquaGuard is a water leakage and overflow prevention system designed for homes and water service providers. The project combines a responsive web interface with IoT-style device monitoring to help users pair sensors, view live pressure readings, and respond to alerts before damage becomes serious.
+
+The application currently includes:
+- user authentication (sign up, sign in, password reset)
+- role-based access for Home Owner, WSP, and Admin users
+- 6-digit device pairing flow
+- live dashboard with gauge and recent history
+- alert status monitoring for problem devices
+
+## Project purpose
+
+The system is intended to reduce the risk of water damage by monitoring pipeline pressure and flagging unsafe conditions early. It supports device pairing and dashboard-based monitoring so users can check current system health without needing a dedicated mobile app.
+
+## Tech stack
+
+- Frontend: HTML, CSS, JavaScript
+- Authentication and database: Supabase
+- SQL support: PostgreSQL through Supabase
+- Styling: custom CSS files in the styles folder
+
+## File structure
+
+- `dashboard/` — dashboard page and UI templates
+- `javascript/` — auth and dashboard logic
+- `logins/` — sign-in, sign-up, and reset-password pages
+- `sql/` — database helper function and SQL scripts
+- `styles/` — page styling files
+- `workflow.md` — project workflow and task tracking
+
+## Getting started
+
+### 1. Set up Supabase
+Create a Supabase project and configure the database for the AquaGuard schema. The frontend uses Supabase Auth and database queries to manage account and device operations.
+
+### 2. Add your Supabase keys
+Open the following files and replace the placeholder values with your project credentials:
+- `javascript/auth.js`
+- `javascript/dashboard.js`
+
+These files currently contain the Supabase URL and anonymous key used by the app.
+
+### 3. Run the SQL scripts
+Use the scripts in the `sql/` folder in the Supabase SQL editor as needed for required database functions and checks.
+
+For example:
+- `email_exists.sql` enables the password reset flow to verify whether an email is registered without exposing the auth table directly.
+
+### 4. Start the app locally
+Because this is a static front-end project, a local web server is enough.
+
+From the project root, run:
+
+```bash
+python -m http.server 8000
+```
+
+Then open:
+
+- `http://localhost:8000/logins/index.html` for the login screen
+- `http://localhost:8000/dashboard/dashboard.html` after authentication
+
+You can also use a VS Code live preview or a simple static server extension.
+
+## Main user flows
+
+### Authentication
+The login page supports:
+- sign in
+- sign up
+- forgot password / reset password
+
+### Device pairing
+Users can pair a device by entering a valid 6-digit pairing code. Once paired, the device can appear in the dashboard and begin sending sensor data.
+
+### Dashboard
+The dashboard shows:
+- pipe and sensor identification
+- real-time or recent pressure value
+- gauge visualization
+- alert banner for active issues
+- recent sensor history
+
+## Current status
+
+This project is in active development. The workflow and implementation tasks are tracked in `workflow.md`, which includes planned phases for backend setup, dashboard development, firmware work, and system integration testing.
+
+## Notes
+
+- The application is currently front-end driven and depends on Supabase for authentication and data storage.
+- The Supabase keys are duplicated across JavaScript files and could later be centralized into a shared config file.
+- For production deployment, additional security hardening and configuration would be required.
+
+## License
+
+This project is intended for academic or project-based use and may be adapted depending on the course or client requirements.
