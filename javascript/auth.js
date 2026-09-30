@@ -186,7 +186,14 @@ forms.forgot.addEventListener('submit', async (event) => {
   setFormLoading(forms.forgot, true);
 
   const email = document.querySelector('#forgot-email').value.trim();
-  const { data: exists, error: lookupError } = await supabaseClient.rpc('email_exists', { p_email: email });
+
+  // Step 1: does an account with this email actually exist? Uses the
+  // email_exists(p_email) function created in Supabase — the parameter
+  // name here MUST match the SQL function's parameter name exactly.
+  const { data: exists, error: lookupError } = await supabaseClient.rpc(
+    'email_exists',
+    { p_email: email }
+  );
 
   if (lookupError) {
     setFormLoading(forms.forgot, false);
@@ -201,14 +208,26 @@ forms.forgot.addEventListener('submit', async (event) => {
     return;
   }
 
+  // Step 2: account exists, send the reset link.
   const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-    redirectTo: new URL('reset-password.html', window.location.href).href
+    redirectTo: new URL('/logins/reset-password.html', window.location.origin).href
   });
 
   setFormLoading(forms.forgot, false);
 
   if (error) {
-    showStatus(error.message, 'error');
+    console.error('Password reset request failed:', error);
+
+    // Translate the messy backend errors you've been hitting into
+    // something a user can actually act on, instead of showing
+    // Supabase/SMTP internals directly.
+    if (error.status === 429 || /rate limit/i.test(error.message)) {
+      showStatus('Too many reset emails requested. Please wait a while and try again.', 'error');
+    } else if (/error sending/i.test(error.message)) {
+      showStatus('Could not send the email right now. Please try again in a few minutes.', 'error');
+    } else {
+      showStatus(error.message, 'error');
+    }
     return;
   }
 
