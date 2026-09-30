@@ -28,11 +28,29 @@ const appRoot = document.getElementById("app-root");
 
   const { data: sessionData } = await client.auth.getSession();
   if (!sessionData.session) {
-    window.location.href = "index.html";
+    window.location.href = "../logins/index.html";
     return;
   }
 
   const userId = sessionData.session.user.id;
+
+  const { data: profile, error: profileError } = await client
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileError) {
+    appRoot.innerHTML = `<p class="center-msg">Couldn't load your account. Please refresh.</p>`;
+    console.error(profileError);
+    return;
+  }
+
+  if (profile?.role === "Admin") {
+    // Admins have a dedicated console — never the homeowner dashboard.
+    window.location.href = "admin.html";
+    return;
+  }
 
   const { data: devices, error } = await client
     .from("devices")
@@ -47,7 +65,10 @@ const appRoot = document.getElementById("app-root");
   }
 
   if (!devices || devices.length === 0) {
-    renderPairingScreen();
+    // No device yet. Admins pre-assign codes to accounts, so pairing
+    // usually "just works" — the manual fallback only appears for the
+    // edge case where a code was never linked to this account.
+    renderPairingScreen(true);
   } else {
     renderDashboard(devices[0]); // Home Owner view: first device.
     // (A WSP fleet view would loop over `devices` instead — see note
@@ -60,13 +81,13 @@ const appRoot = document.getElementById("app-root");
 // ============================================================
 document.getElementById("signout-btn").addEventListener("click", async () => {
   if (client) await client.auth.signOut();
-  window.location.href = "index.html";
+  window.location.href = "../logins/index.html";
 });
 
 // ============================================================
 // PAIRING SCREEN
 // ============================================================
-function renderPairingScreen() {
+function renderPairingScreen(showManualFallback = false) {
   const template = document.getElementById("pairing-template");
   appRoot.innerHTML = "";
   appRoot.appendChild(template.content.cloneNode(true));
@@ -98,38 +119,68 @@ function renderPairingScreen() {
       return;
     }
 
-    setPairBtnLoading(pairBtn, true);
-
-    const { data: sessionData } = await client.auth.getSession();
-    const userId = sessionData.session.user.id;
-
-    // Claim the device: only succeeds if a row with this exact code
-    // exists AND is still unclaimed (owner_id is null). The RLS policy
-    // enforces the "unclaimed" half; the .eq("pairing_code") enforces
-    // the code match itself.
-    const { data, error } = await client
-      .from("devices")
-      .update({ owner_id: userId })
-      .eq("pairing_code", code)
-      .is("owner_id", null)
-      .select();
-
-    setPairBtnLoading(pairBtn, false);
-
-    if (error) {
-      showPairingBanner(banner, "Something went wrong. Please try again.", "error");
-      console.error(error);
-      return;
-    }
-
-    if (!data || data.length === 0) {
-      showPairingBanner(banner, "Invalid code, or this device is already paired to another account.", "error");
-      return;
-    }
-
-    showPairingBanner(banner, "Device paired! Loading your dashboard…", "success");
-    setTimeout(() => renderDashboard(data[0]), 700);
+    await claimDeviceByCode(code, banner, pairBtn);
   });
+
+  // ---------- Manual fallback (admin assigned the code already) ----------
+  const manualToggle = document.getElementById("manual-pair-toggle");
+  const manualForm = document.getElementById("manual-pair-form");
+
+  if (showManualFallback && manualToggle && manualForm) {
+    manualToggle.parentElement.classList.remove("hidden");
+
+    manualToggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      manualForm.classList.toggle("hidden");
+    });
+
+    manualForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const code = document.getElementById("manual-pair-code").value.trim();
+
+      if (!/^[0-9]{6}$/.test(code)) {
+        showPairingBanner(banner, "Enter the full 6-digit code.", "error");
+        return;
+      }
+
+      await claimDeviceByCode(code, banner, document.getElementById("manual-pair-btn"));
+    });
+  }
+}
+
+// Shared claim logic for both the digit-box form and the manual
+// fallback form. Only succeeds if a device row with this exact code
+// exists AND is still unclaimed (owner_id is null) — the RLS policy
+// enforces the "unclaimed" half; .eq("pairing_code") enforces the
+// code match itself.
+async function claimDeviceByCode(code, banner, btn) {
+  setPairBtnLoading(btn, true);
+
+  const { data: sessionData } = await client.auth.getSession();
+  const userId = sessionData.session.user.id;
+
+  const { data, error } = await client
+    .from("devices")
+    .update({ owner_id: userId })
+    .eq("pairing_code", code)
+    .is("owner_id", null)
+    .select();
+
+  setPairBtnLoading(btn, false);
+
+  if (error) {
+    showPairingBanner(banner, "Something went wrong. Please try again.", "error");
+    console.error(error);
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    showPairingBanner(banner, "Invalid code, or this device is already paired to another account.", "error");
+    return;
+  }
+
+  showPairingBanner(banner, "Device paired! Loading your dashboard…", "success");
+  setTimeout(() => renderDashboard(data[0]), 700);
 }
 
 function showPairingBanner(banner, message, type) {

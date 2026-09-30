@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AquaGuard — Admin Console</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="stylesheet" href="../styles/dashboard.css" />
+</head>
+<body class="dashboard-body">
+
+<div class="dashboard-video-bg" aria-hidden="true">
+  <video autoplay muted loop playsinline preload="metadata">
+    <source src="../Water_monitoring_dashboard_anima%E2%80%A6_20260930094007.mp4" type="video/mp4" />
+  </video>
+</div>
+
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="brand-icon-sm">💧</span> AquaGuard <span class="admin-chip">Admin Console</span>
+  </div>
+  <button id="signout-btn" class="btn-ghost">Sign Out</button>
+</header>
+
+<main id="app-root" class="app-root admin-root">
+  <!-- Loading state -->
+  <div id="loading-state" class="center-msg">
+    <span class="spinner-lg"></span>
+    <p>Loading admin data…</p>
+  </div>
+</main>
+
+<!-- ============ TEMPLATE: ADMIN CONSOLE ============ -->
+<template id="admin-console-template">
+  <div class="admin-console">
+
+    <div id="admin-banner" class="status-banner hidden"></div>
+
+    <!-- ============ ASSIGN DEVICE (EMAIL + CODE) ============ -->
+    <section class="admin-card-panel">
+      <h2>Assign Device Access</h2>
+      <p class="muted">Link a 6-digit device code to a registered account. The account claims the code on its dashboard to unlock the live view.</p>
+
+      <form id="admin-form" class="admin-form">
+        <label for="admin-account-email">Account Email</label>
+        <input type="email" id="admin-account-email" placeholder="user@example.com" required autocomplete="off" list="account-emails" />
+
+        <datalist id="account-emails"><!-- filled by admin.js --></datalist>
+
+        <label for="admin-pairing-code">Device Code</label>
+        <input type="text" id="admin-pairing-code" placeholder="6-digit device code" required maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="off" list="unclaimed-codes" />
+
+        <datalist id="unclaimed-codes"><!-- filled by admin.js --></datalist>
+
+        <button type="submit" class="btn-primary" id="admin-assign-btn">
+          <span class="btn-label">Assign Device</span>
+          <span class="spinner hidden"></span>
+        </button>
+      </form>
+    </section>
+
+    <!-- ============ DEVICE CODES ============ -->
+    <section class="admin-card-panel">
+      <div class="admin-section-head">
+        <h2>Device Codes</h2>
+        <button type="button" id="admin-refresh" class="btn-ghost">Refresh</button>
+      </div>
+      <p class="muted">Hand an <strong>Unclaimed</strong> code to an account — in person, or with the mail button. Once the account enters it on their dashboard, the code moves to <strong>Claimed</strong>.</p>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Pipe</th>
+              <th>Sensor</th>
+              <th>Status</th>
+              <th>Assigned To</th>
+              <th class="th-actions">Send</th>
+            </tr>
+          </thead>
+          <tbody id="codes-tbody"><!-- filled by admin.js --></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ REGISTERED ACCOUNTS ============ -->
+    <section class="admin-card-panel">
+      <div class="admin-section-head">
+        <h2>Registered Accounts</h2>
+        <span id="accounts-count" class="badge">0</span>
+      </div>
+      <p class="muted">Everyone who has signed up, with the codes already assigned to them.</p>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Devices</th>
+              <th>Codes Held</th>
+            </tr>
+          </thead>
+          <tbody id="accounts-tbody"><!-- filled by admin.js --></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../javascript/admin.js"></script>
+</body>
+</html>

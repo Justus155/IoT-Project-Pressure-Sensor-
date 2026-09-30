@@ -308,6 +308,39 @@ body.dashboard-body {
   line-height: 1.6;
 }
 
+.admin-form {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.admin-form label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.admin-form input {
+  width: 100%;
+  padding: 13px 14px;
+  border: 2px solid var(--aqua-200);
+  border-radius: var(--radius-md);
+  background: var(--aqua-50);
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+}
+
+.admin-form input:focus {
+  border-color: var(--aqua-500);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15);
+}
+
+.admin-form .btn-primary {
+  margin-top: 18px;
+}
+
 /* Code Input Boxes */
 .code-inputs {
   display: flex;
@@ -676,6 +709,186 @@ body.dashboard-body {
 /* ---------- Utility Classes ---------- */
 .muted { color: var(--text-muted); }
 .text-center { text-align: center; }
+
+/* ---------- Admin Console ---------- */
+.admin-chip {
+  display: inline-block;
+  margin-left: 12px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(125, 211, 252, 0.15);
+  color: var(--aqua-200);
+  border: 1px solid rgba(125, 211, 252, 0.35);
+}
+
+.admin-console {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: fadeIn 0.5s var(--ease-out);
+}
+
+.admin-card-panel {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 28px 28px 24px;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-light);
+}
+
+.admin-card-panel h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.admin-card-panel > .muted {
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.admin-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-form {
+  max-width: 460px;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  min-width: 640px;
+}
+
+.admin-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-light);
+  white-space: nowrap;
+}
+
+.admin-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.admin-table tbody tr:hover {
+  background: var(--aqua-50);
+}
+
+.th-actions, .td-actions { text-align: right; white-space: nowrap; }
+
+.btn-small {
+  padding: 6px 14px;
+  font-size: 0.8rem;
+}
+
+.code-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--aqua-50);
+  border: 1px solid var(--aqua-200);
+  color: var(--aqua-800);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+}
+
+.role-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.role-HomeOwner { background: var(--aqua-50); color: var(--aqua-700); border: 1px solid var(--aqua-200); }
+.role-WSP       { background: var(--warning-bg); color: var(--warning); border: 1px solid #fde68a; }
+.role-Admin     { background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; }
+
+/* ---------- Pairing fallback (manual single-field code) ---------- */
+.pairing-fallback {
+  margin-top: 18px;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.pairing-fallback a {
+  color: var(--aqua-600);
+  font-weight: 600;
+}
+
+.manual-pair-form {
+  margin-top: 16px;
+  padding-top: 20px;
+  border-top: 1px dashed var(--border);
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.manual-pair-form label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.manual-pair-form input {
+  width: 100%;
+  padding: 13px 14px;
+  border: 2px solid var(--aqua-200);
+  border-radius: var(--radius-md);
+  background: var(--aqua-50);
+  color: var(--text-primary);
+  font: inherit;
+  letter-spacing: 0.3em;
+  outline: none;
+}
+
+.manual-pair-form input:focus {
+  border-color: var(--aqua-500);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15);
+}
+
+.small-note {
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
 
 /* ---------- Scrollbar ---------- */
 ::-webkit-scrollbar {

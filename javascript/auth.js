@@ -26,7 +26,26 @@ function setFormLoading(form, isLoading) {
   button.querySelector('.spinner').classList.toggle('hidden', !isLoading);
 }
 
-function goToDashboard() {
+async function goToDashboard() {
+  // Role-based routing: Admins land on their console, everyone else
+  // on the normal dashboard.
+  try {
+    const { data } = await supabaseClient.auth.getSession();
+    const userId = data.session?.user.id;
+    if (userId) {
+      const { data: profile } = await supabaseClient
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+      if (profile?.role === 'Admin') {
+        window.location.href = '../dashboard/admin.html';
+        return;
+      }
+    }
+  } catch (err) {
+    console.error('Role check failed, defaulting to dashboard:', err);
+  }
   window.location.href = '../dashboard/dashboard.html';
 }
 
@@ -93,7 +112,7 @@ forms.signin.addEventListener('submit', async (event) => {
     return;
   }
 
-  goToDashboard();
+  await goToDashboard();
 });
 
 forms.signup.addEventListener('submit', async (event) => {
@@ -167,7 +186,7 @@ forms.signup.addEventListener('submit', async (event) => {
   }
 
   if (data.session) {
-    goToDashboard();
+    await goToDashboard();
     return;
   }
 

@@ -24,10 +24,10 @@ The system is intended to reduce the risk of water damage by monitoring pipeline
 
 ## File structure
 
-- `dashboard/` — dashboard page and UI templates
-- `javascript/` — auth and dashboard logic
+- `dashboard/` — dashboard page, admin console page, and UI templates
+- `javascript/` — auth, dashboard, and admin console logic
 - `logins/` — sign-in, sign-up, and reset-password pages
-- `sql/` — database helper function and SQL scripts
+- `sql/` — database helper functions and SQL scripts
 - `styles/` — page styling files
 - `workflow.md` — project workflow and task tracking
 
@@ -73,8 +73,16 @@ The login page supports:
 - sign up
 - forgot password / reset password
 
-### Device pairing
-Users can pair a device by entering a valid 6-digit pairing code. Once paired, the device can appear in the dashboard and begin sending sensor data.
+### Device pairing (admin-assigned codes)
+Devices live in the `devices` table with a 6-digit pairing code. The flow is:
+
+1. **Admin seeds devices** — run `sql/admin_panel_functions.sql` then `sql/synthetic_data.sql` in the Supabase SQL editor to create demo devices with codes, thresholds, 24h of synthetic readings and demo alerts.
+2. **Admin links a code to an account** — sign in as an Admin (you are redirected to `dashboard/admin.html` automatically). There you can see every registered email and every device code, then assign an unclaimed code to an account (by hand, or with the ✉ Send button which opens a pre-filled email draft).
+3. **Account claims the code** — the user signs in, sees the Pair New Device screen, enters the code they received, and their dashboard unlocks (gauge, LEDs, 24h chart, alerts).
+
+Assignment (`assigned_to`) reserves a code for one account; only that account can claim it (`owner_id`). This is enforced by RLS, so even a tampered client cannot claim someone else's reserved device.
+
+> The user-facing Pair New Device screen also has a small manual single-field fallback for cases where the digit boxes reject a valid code.
 
 ### Dashboard
 The dashboard shows:
@@ -83,6 +91,12 @@ The dashboard shows:
 - gauge visualization
 - alert banner for active issues
 - recent sensor history
+
+### Admin console
+Admins get a dedicated page (`dashboard/admin.html`) after signing in, with:
+- an assign form (email + device code, with autocomplete for both)
+- the full device-code list with claimed/unclaimed status and per-code email handoff
+- all registered accounts with role, device count, and codes held
 
 ## Current status
 

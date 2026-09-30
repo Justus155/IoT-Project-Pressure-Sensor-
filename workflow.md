@@ -23,13 +23,14 @@ Open this in VS Code and check items off (`[ ]` → `[x]`) as you go — the Mar
 - [x] Run `schema.sql` (profiles, devices, thresholds, sensor_readings, alerts)
 - [x] Run `auto_profile_trigger.sql` (auto-creates profile row on sign-up)
 - [x] Run `device_pairing_migration.sql` (pairing_code column + claim policies)
+- [x] Admin-assigned pairing flow: `admin_assign_device.sql` v2 reserves a code for an account (`assigned_to`); the account must still enter the code to claim it (`owner_id`) — enforced by RLS
+- [x] Admin console page (`dashboard/admin.html` + `javascript/admin.js`): registered emails list, device-code table, assign form, per-code email handoff; admins are redirected here automatically on sign-in
+- [x] Synthetic demo data: `sql/synthetic_data.sql` seeds 8 devices, thresholds, 24h of readings and demo alerts
 - [ ] Turn "Confirm email" back ON before real users sign up (currently OFF for dev testing)
-- [ ] Insert one manual test device row to develop against:
-  ```sql
-  insert into devices (pipe_number, sensor_id, pairing_code, type)
-  values ('B-12', 'S-04', '842019', 'pressure');
-  ```
-- [ ] Insert a few fake `sensor_readings` rows for that device so the gauge/chart have something to render before real hardware is ready
+- [ ] Run `sql/admin_panel_functions.sql` in Supabase (is_admin helper, admin list RPCs, admin RLS policies)
+- [ ] Re-run `sql/admin_assign_device.sql` v2 in Supabase (adds `assigned_to` column + exclusive claim policy)
+- [ ] Run `sql/synthetic_data.sql` in Supabase to seed the demo devices/readings
+- [ ] If an older claim policy exists under a different name, drop it so only "Accounts can claim their assigned devices" remains
 
 ---
 

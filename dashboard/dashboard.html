@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>AquaGuard — Dashboard</title>
 <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-<link rel="stylesheet" href="style.css" />
 <link rel="stylesheet" href="../styles/dashboard.css" />
 </head>
 <body class="dashboard-body">
@@ -53,6 +52,21 @@
         <span class="btn-label">Provision &amp; Connect</span>
         <span class="spinner hidden"></span>
       </button>
+    </form>
+
+    <p class="pairing-fallback hidden">
+      Received a code from your admin but the boxes above won't accept it?
+      <a href="#" id="manual-pair-toggle">Pair it manually</a>
+    </p>
+
+    <form id="manual-pair-form" class="manual-pair-form hidden">
+      <label for="manual-pair-code">Device code from your admin</label>
+      <input type="text" id="manual-pair-code" placeholder="6-digit code" maxlength="6" inputmode="numeric" autocomplete="off" />
+      <button type="submit" class="btn-primary" id="manual-pair-btn">
+        <span class="btn-label">Pair Code</span>
+        <span class="spinner hidden"></span>
+      </button>
+      <p class="muted small-note">Single-field entry for the same 6-digit code — use it if the boxes above report the code as invalid.</p>
     </form>
   </div>
 </template>
