@@ -36,10 +36,30 @@
 
     <div id="admin-banner" class="status-banner hidden"></div>
 
+    <!-- ============ SYSTEM STATS ============ -->
+    <section class="admin-stats-grid">
+      <div class="stat-card">
+        <p class="stat-label">Total Users</p>
+        <p class="stat-value" id="stat-users">—</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">Devices</p>
+        <p class="stat-value" id="stat-devices">—</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">Open Alerts</p>
+        <p class="stat-value stat-red" id="stat-alerts">—</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">Pending Codes</p>
+        <p class="stat-value stat-green" id="stat-pending">—</p>
+      </div>
+    </section>
+
     <!-- ============ ASSIGN DEVICE (EMAIL + CODE) ============ -->
     <section class="admin-card-panel">
       <h2>Assign Device Access</h2>
-      <p class="muted">Link a 6-digit device code to a registered account. The account claims the code on its dashboard to unlock the live view.</p>
+      <p class="muted">Link a 6-digit device code to a registered Home Owner or WSP account and email it to them. They enter the code on their dashboard to unlock the live view.</p>
 
       <form id="admin-form" class="admin-form">
         <label for="admin-account-email">Account Email</label>
@@ -51,6 +71,11 @@
         <input type="text" id="admin-pairing-code" placeholder="6-digit device code" required maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="off" list="unclaimed-codes" />
 
         <datalist id="unclaimed-codes"><!-- filled by admin.js --></datalist>
+
+        <label class="admin-check" for="admin-send-email">
+          <input type="checkbox" id="admin-send-email" checked />
+          Email the code to this account now
+        </label>
 
         <button type="submit" class="btn-primary" id="admin-assign-btn">
           <span class="btn-label">Assign Device</span>
@@ -65,7 +90,7 @@
         <h2>Device Codes</h2>
         <button type="button" id="admin-refresh" class="btn-ghost">Refresh</button>
       </div>
-      <p class="muted">Hand an <strong>Unclaimed</strong> code to an account — in person, or with the mail button. Once the account enters it on their dashboard, the code moves to <strong>Claimed</strong>.</p>
+      <p class="muted"><strong>Unassigned</strong> codes are free to hand out. <strong>Awaiting pairing</strong> codes are reserved for an account — use ✉ Email to (re)send the code. Once the account enters it, the code moves to <strong>Paired</strong>.</p>
 
       <div class="admin-table-wrap">
         <table class="admin-table">
@@ -75,8 +100,9 @@
               <th>Pipe</th>
               <th>Sensor</th>
               <th>Status</th>
-              <th>Assigned To</th>
-              <th class="th-actions">Send</th>
+              <th>Reserved For</th>
+              <th>Paired By</th>
+              <th class="th-actions">Action</th>
             </tr>
           </thead>
           <tbody id="codes-tbody"><!-- filled by admin.js --></tbody>
@@ -84,13 +110,43 @@
       </div>
     </section>
 
+    <!-- ============ PAIRING CODES HISTORY ============ -->
+    <section class="admin-card-panel">
+      <div class="admin-section-head">
+        <h2>Pairing Codes History</h2>
+      </div>
+      <p class="muted">Complete audit trail of every code generated, when it was sent, and whether it was used.</p>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Sent To</th>
+              <th>Status</th>
+              <th>Expires</th>
+              <th>Used At</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody id="pairing-codes-tbody">
+            <tr><td colspan="6" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- ============ REGISTERED ACCOUNTS ============ -->
     <section class="admin-card-panel">
       <div class="admin-section-head">
-        <h2>Registered Accounts</h2>
-        <span id="accounts-count" class="badge">0</span>
+        <h2>Home Owner &amp; WSP Accounts <span id="accounts-count" class="badge">0</span></h2>
+        <select id="role-filter" class="filter-select" aria-label="Filter by role">
+          <option value="all">All roles</option>
+          <option value="HomeOwner">Home Owners</option>
+          <option value="WSP">WSPs</option>
+        </select>
       </div>
-      <p class="muted">Everyone who has signed up, with the codes already assigned to them.</p>
+      <p class="muted">Everyone who has signed up as a Home Owner or Water Service Provider, with their last sign-in and the codes reserved for them.</p>
 
       <div class="admin-table-wrap">
         <table class="admin-table">
@@ -99,8 +155,10 @@
               <th>Email</th>
               <th>Name</th>
               <th>Role</th>
-              <th>Devices</th>
-              <th>Codes Held</th>
+              <th>Last Sign-in</th>
+              <th>Pending Codes</th>
+              <th>Paired</th>
+              <th class="th-actions">Action</th>
             </tr>
           </thead>
           <tbody id="accounts-tbody"><!-- filled by admin.js --></tbody>

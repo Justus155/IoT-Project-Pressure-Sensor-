@@ -16,6 +16,73 @@ try {
 }
 
 const appRoot = document.getElementById("app-root");
+const deviceSelect = document.getElementById("device-select");
+const onlineBadge = document.getElementById("online-badge");
+const navAlertCount = document.getElementById("nav-alert-count");
+const navItems = document.querySelectorAll(".nav-item[data-view]");
+
+const HISTORY_POINTS = 288; // 24h of 5-minute readings
+const ZONE_COLORS = { normal: "#22c55e", warning: "#eab308", critical: "#ef4444" };
+const ZONE_LABELS = { normal: "Normal", warning: "Warning", critical: "Critical" };
+const VIEW_TEXT = {
+  monitor: ["Primary Monitoring", "Live pressure and 24h analytics for the selected pipe"],
+  incidents: ["Incident Room", "Leak and overflow alerts across all your devices"],
+  pair: ["Pair New Device", "Enter the 6-digit code your admin emailed you"],
+};
+
+const state = {
+  userId: null,
+  devices: [],
+  current: null,
+  view: "monitor",
+  renderSeq: 0, // bumps on every view change so stale async renders bail out
+  channel: null,
+  charts: [],
+};
+
+if (window.Chart) {
+  Chart.defaults.color = "#93a3b5";
+  Chart.defaults.borderColor = "#1e3550";
+  Chart.defaults.font.family = "Inter, -apple-system, 'Segoe UI', Roboto, sans-serif";
+}
+
+// ------------------------------------------------------------
+// Resolve the signed-in user's role.
+// 1) Read the account's own profiles row. If RLS hides it (missing
+//    SELECT policy) or the row is missing, .maybeSingle() returns
+//    null WITHOUT an error — that silent failure is what used to
+//    let admins onto this homeowner dashboard.
+// 2) Fall back to the SECURITY DEFINER is_admin() RPC, which bypasses
+//    RLS on profiles.
+// The role is compared case-insensitively everywhere, so 'admin',
+// 'ADMIN' or ' Admin ' in the table can never break routing again.
+// ------------------------------------------------------------
+async function fetchUserRole(client, userId) {
+  const { data: profile, error: profileError } = await client
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error("Could not read your profile row:", profileError);
+  } else if (!profile) {
+    console.warn(
+      "No profiles row could be read for your account. " +
+        "Run sql/fix_admin_routing.sql in the Supabase SQL Editor."
+    );
+  }
+
+  const role = String(profile?.role ?? "").trim().toLowerCase();
+  if (role) return role;
+
+  const { data: isAdmin, error: rpcError } = await client.rpc("is_admin");
+  if (rpcError) {
+    console.warn("is_admin() fallback unavailable:", rpcError.message);
+    return null;
+  }
+  return isAdmin ? "admin" : null;
+}
 
 // ============================================================
 // ENTRY POINT
@@ -32,12 +99,12 @@ const appRoot = document.getElementById("app-root");
     return;
   }
 
-  const userId = sessionData.session.user.id;
+  state.userId = sessionData.session.user.id;
 
   const { data: profile, error: profileError } = await client
     .from("profiles")
-    .select("role")
-    .eq("id", userId)
+    .select("name, role")
+    .eq("id", state.userId)
     .maybeSingle();
 
   if (profileError) {
@@ -46,34 +113,24 @@ const appRoot = document.getElementById("app-root");
     return;
   }
 
-  if (profile?.role === "Admin") {
+  const role = await fetchUserRole(client, state.userId);
+  if (role === "admin") {
     // Admins have a dedicated console — never the homeowner dashboard.
     window.location.href = "admin.html";
     return;
   }
 
-  const { data: devices, error } = await client
-    .from("devices")
-    .select("*")
-    .eq("owner_id", userId)
-    .order("install_date", { ascending: false });
+  fillSidebarUser(profile, sessionData.session.user.email);
+  wireNavigation();
 
-  if (error) {
+  if (!(await loadDevices())) {
     appRoot.innerHTML = `<p class="center-msg">Couldn't load your devices. Please refresh.</p>`;
-    console.error(error);
     return;
   }
 
-  if (!devices || devices.length === 0) {
-    // No device yet. Admins pre-assign codes to accounts, so pairing
-    // usually "just works" — the manual fallback only appears for the
-    // edge case where a code was never linked to this account.
-    renderPairingScreen(true);
-  } else {
-    renderDashboard(devices[0]); // Home Owner view: first device.
-    // (A WSP fleet view would loop over `devices` instead — see note
-    // at the bottom of this file.)
-  }
+  // No device yet → the account still has to enter the code it was emailed.
+  refreshAlertCount();
+  showView(state.devices.length ? "monitor" : "pair");
 })();
 
 // ============================================================
@@ -83,6 +140,112 @@ document.getElementById("signout-btn").addEventListener("click", async () => {
   if (client) await client.auth.signOut();
   window.location.href = "../logins/index.html";
 });
+
+// ============================================================
+// NAVIGATION + SHARED STATE
+// ============================================================
+function wireNavigation() {
+  navItems.forEach((btn) => btn.addEventListener("click", () => showView(btn.dataset.view)));
+
+  deviceSelect.addEventListener("change", () => {
+    state.current = state.devices.find((d) => d.id === deviceSelect.value) ?? state.current;
+    showView("monitor");
+  });
+
+  appRoot.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-goto]");
+    if (target) showView(target.dataset.goto);
+  });
+}
+
+function showView(view) {
+  if (view !== "pair" && !state.current) view = "pair";
+  state.view = view;
+  state.renderSeq += 1;
+  teardownLiveView();
+
+  navItems.forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.view === view);
+    if (btn.dataset.view !== "pair") btn.disabled = state.devices.length === 0;
+  });
+
+  const [title, subtitle] = VIEW_TEXT[view];
+  setText("view-title", title);
+  setText("view-subtitle", subtitle);
+  deviceSelect.classList.toggle("hidden", view !== "monitor" || state.devices.length < 2);
+  onlineBadge.classList.toggle("hidden", view !== "monitor");
+
+  if (view === "pair") renderPairingScreen(true);
+  else if (view === "incidents") renderIncidents();
+  else renderDashboard(state.current);
+}
+
+function teardownLiveView() {
+  if (state.channel) {
+    client.removeChannel(state.channel);
+    state.channel = null;
+  }
+  state.charts.forEach((chart) => chart.destroy());
+  state.charts = [];
+}
+
+async function loadDevices() {
+  const { data, error } = await client
+    .from("devices")
+    .select("*")
+    .eq("owner_id", state.userId)
+    .order("install_date", { ascending: false });
+
+  if (error) {
+    console.error(error);
+    return false;
+  }
+
+  state.devices = data || [];
+  if (!state.devices.some((d) => d.id === state.current?.id)) {
+    state.current = state.devices[0] ?? null;
+  }
+
+  deviceSelect.innerHTML = "";
+  state.devices.forEach((d) => {
+    const option = document.createElement("option");
+    option.value = d.id;
+    option.textContent = `Pipe #${d.pipe_number} · ${d.sensor_id}`;
+    deviceSelect.appendChild(option);
+  });
+  if (state.current) deviceSelect.value = state.current.id;
+  return true;
+}
+
+async function refreshAlertCount() {
+  const ids = state.devices.map((d) => d.id);
+  if (ids.length === 0) {
+    navAlertCount.classList.add("hidden");
+    return;
+  }
+
+  const { count, error } = await client
+    .from("alerts")
+    .select("id", { count: "exact", head: true })
+    .in("device_id", ids)
+    .eq("status", "open");
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+  navAlertCount.textContent = String(count ?? 0);
+  navAlertCount.classList.toggle("hidden", !count);
+}
+
+function fillSidebarUser(profile, email) {
+  const name = profile?.name || email.split("@")[0];
+  const initials = name.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2);
+  setText("user-name", name);
+  const userRole = String(profile?.role ?? "").trim().toLowerCase();
+  setText("user-role", userRole === "wsp" ? "Water Service Provider" : "Home Owner");
+  setText("user-avatar", initials.toUpperCase() || "?");
+}
 
 // ============================================================
 // PAIRING SCREEN
@@ -180,7 +343,11 @@ async function claimDeviceByCode(code, banner, btn) {
   }
 
   showPairingBanner(banner, "Device paired! Loading your dashboard…", "success");
-  setTimeout(() => renderDashboard(data[0]), 700);
+  await loadDevices();
+  state.current = state.devices.find((d) => d.id === data[0].id) ?? data[0];
+  deviceSelect.value = state.current.id;
+  refreshAlertCount();
+  setTimeout(() => showView("monitor"), 700);
 }
 
 function showPairingBanner(banner, message, type) {
@@ -195,112 +362,228 @@ function setPairBtnLoading(btn, isLoading) {
 }
 
 // ============================================================
-// DASHBOARD SCREEN
+// MONITORING DASHBOARD
 // ============================================================
 async function renderDashboard(device) {
-  const template = document.getElementById("dashboard-template");
-  appRoot.innerHTML = "";
-  appRoot.appendChild(template.content.cloneNode(true));
+  const seq = state.renderSeq;
+  mount("dashboard-template");
 
-  document.getElementById("device-title").textContent = `Pipe #${device.pipe_number}`;
-  document.getElementById("device-subtitle").textContent = `Sensor ID: ${device.sensor_id}`;
+  setText("device-title", `Pipe #${device.pipe_number}`);
+  setText("device-subtitle", `Sensor ${device.sensor_id} · ${device.type ?? "pressure"} sensor`);
 
-  const badge = document.getElementById("online-badge");
-  badge.textContent = device.status === "active" ? "● Online" : "● Offline";
-  badge.classList.toggle("offline", device.status !== "active");
+  const isOnline = device.status === "active";
+  onlineBadge.textContent = isOnline ? "Online" : "Offline";
+  onlineBadge.className = `badge ${isOnline ? "online" : "offline"}`;
 
-  // ---------- Thresholds (needed to scale the gauge & LEDs) ----------
-  const { data: thresholds } = await client
-    .from("thresholds")
-    .select("*")
-    .eq("device_id", device.id);
+  // Latest 288 readings rather than "since 24h ago", so seeded demo
+  // data still draws a full day even if it was inserted days earlier.
+  const [thresholdsRes, readingsRes, alertsRes] = await Promise.all([
+    client.from("thresholds").select("*").eq("device_id", device.id),
+    client
+      .from("sensor_readings")
+      .select("value, timestamp")
+      .eq("device_id", device.id)
+      .order("timestamp", { ascending: false })
+      .limit(HISTORY_POINTS),
+    client
+      .from("alerts")
+      .select("*")
+      .eq("device_id", device.id)
+      .eq("status", "open")
+      .order("triggered_at", { ascending: false }),
+  ]);
 
-  const leakT = thresholds?.find((t) => t.parameter === "LEAK_THRESHOLD");
-  const overflowT = thresholds?.find((t) => t.parameter === "OVERFLOW_THRESHOLD");
-  const pMin = leakT?.min_value ?? 0;
-  const pMax = overflowT?.max_value ?? 100;
+  if (seq !== state.renderSeq) return;
+  [thresholdsRes, readingsRes, alertsRes].forEach((res) => res.error && console.error(res.error));
 
-  // ---------- Latest reading ----------
-  const { data: latestReadings } = await client
-    .from("sensor_readings")
-    .select("*")
-    .eq("device_id", device.id)
-    .order("timestamp", { ascending: false })
-    .limit(1);
+  const thresholds = thresholdsRes.data || [];
+  const leakT = thresholds.find((t) => t.parameter === "LEAK_THRESHOLD");
+  const overflowT = thresholds.find((t) => t.parameter === "OVERFLOW_THRESHOLD");
+  const range = { min: Number(leakT?.min_value ?? 0), max: Number(overflowT?.max_value ?? 100) };
 
-  const currentValue = latestReadings?.[0]?.value ?? null;
-  document.getElementById("gauge-value").textContent = currentValue !== null ? currentValue.toFixed(1) : "—";
-  drawGauge(currentValue, pMin, pMax);
-  updateLEDs(currentValue, pMin, pMax);
+  const readings = (readingsRes.data || [])
+    .map((r) => ({ value: Number(r.value), timestamp: r.timestamp }))
+    .reverse();
+  const openAlerts = alertsRes.data || [];
 
-  // ---------- Peak / baseline (last 24h) ----------
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: last24h } = await client
-    .from("sensor_readings")
-    .select("value, timestamp")
-    .eq("device_id", device.id)
-    .gte("timestamp", since)
-    .order("timestamp", { ascending: true });
+  updateLiveReading(readings[readings.length - 1] ?? null, range);
+  updateStats(readings, openAlerts.length);
+  if (openAlerts.length > 0) showAlertBanner(openAlerts[0], device);
 
-  if (last24h && last24h.length > 0) {
-    const values = last24h.map((r) => r.value);
-    document.getElementById("stat-peak").textContent = `${Math.max(...values).toFixed(1)} PSI`;
-    document.getElementById("stat-baseline").textContent = `${Math.min(...values).toFixed(1)} PSI`;
-    drawHistoryChart(last24h);
-  } else {
-    document.getElementById("stat-peak").textContent = "No data yet";
-    document.getElementById("stat-baseline").textContent = "No data yet";
-  }
+  const trendChart = drawTrendChart(readings, range);
+  drawHourlyChart(readings, range);
+  drawZoneChart(readings, range);
 
-  // ---------- Open alerts ----------
-  const { data: openAlerts } = await client
-    .from("alerts")
-    .select("*")
-    .eq("device_id", device.id)
-    .eq("status", "open")
-    .order("triggered_at", { ascending: false })
-    .limit(1);
-
-  if (openAlerts && openAlerts.length > 0) {
-    const alert = openAlerts[0];
-    const banner = document.getElementById("alert-banner");
-    banner.textContent = `${alert.type} detected on Pipe #${device.pipe_number}, Sensor ${device.sensor_id} — ${new Date(alert.triggered_at).toLocaleString()}`;
-    banner.classList.remove("hidden");
-  }
-
-  // ---------- Live updates: re-run this function's data fetch on new readings ----------
-  client
-    .channel(`device-${device.id}-readings`)
+  // ---------- Live updates ----------
+  state.channel = client
+    .channel(`device-${device.id}`)
     .on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "sensor_readings", filter: `device_id=eq.${device.id}` },
       (payload) => {
-        const value = payload.new.value;
-        document.getElementById("gauge-value").textContent = value.toFixed(1);
-        drawGauge(value, pMin, pMax);
-        updateLEDs(value, pMin, pMax);
+        const reading = { value: Number(payload.new.value), timestamp: payload.new.timestamp };
+        readings.push(reading);
+        if (readings.length > HISTORY_POINTS) readings.shift();
+        updateLiveReading(reading, range);
+        updateStats(readings, openAlerts.length);
+        pushTrendPoint(trendChart, reading);
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "alerts", filter: `device_id=eq.${device.id}` },
+      (payload) => {
+        if (payload.new.status !== "open") return;
+        openAlerts.unshift(payload.new);
+        updateStats(readings, openAlerts.length);
+        showAlertBanner(payload.new, device);
+        refreshAlertCount();
       }
     )
     .subscribe();
 }
 
+function updateLiveReading(reading, range) {
+  const value = reading?.value ?? null;
+  setText("gauge-value", value === null ? "—" : value.toFixed(1));
+  drawGauge(value, range);
+  updateLEDs(value, range);
+
+  const zone = value === null ? null : zoneOf(value, range);
+  const chip = document.getElementById("zone-chip");
+  if (chip) {
+    chip.textContent = zone ? ZONE_LABELS[zone] : "No data";
+    chip.className = `zone-chip ${zone ?? ""}`;
+  }
+  setText(
+    "last-updated",
+    reading ? `Last reading ${new Date(reading.timestamp).toLocaleString()}` : "Waiting for the first reading from this device"
+  );
+}
+
+function updateStats(readings, openAlertCount) {
+  const values = readings.map((r) => r.value);
+  const fmt = (v) => `${v.toFixed(1)} PSI`;
+  const hasData = values.length > 0;
+
+  setText("kpi-peak", hasData ? fmt(Math.max(...values)) : "No data");
+  setText("kpi-baseline", hasData ? fmt(Math.min(...values)) : "No data");
+  setText("kpi-average", hasData ? fmt(values.reduce((a, b) => a + b, 0) / values.length) : "No data");
+  setText("kpi-alerts", String(openAlertCount));
+  document.getElementById("kpi-alerts")?.classList.toggle("stat-red", openAlertCount > 0);
+}
+
+function showAlertBanner(alert, device) {
+  setText(
+    "alert-text",
+    `⚠ ${alert.type} detected on Pipe #${device.pipe_number}, Sensor ${device.sensor_id} — ${new Date(alert.triggered_at).toLocaleString()}`
+  );
+  document.getElementById("alert-banner")?.classList.remove("hidden");
+}
+
+// Same 60% / 85% bands as the gauge, LEDs and ESP32 firmware.
+function toPct(value, range) {
+  const span = range.max - range.min || 1;
+  return Math.min(Math.max((value - range.min) / span, 0), 1);
+}
+
+function zoneOf(value, range) {
+  const pct = toPct(value, range);
+  return pct > 0.85 ? "critical" : pct > 0.6 ? "warning" : "normal";
+}
+
+function zoneLimit(range, pct) {
+  return range.min + (range.max - range.min) * pct;
+}
+
+// ============================================================
+// INCIDENT ROOM
+// ============================================================
+const ALERT_HINTS = {
+  LEAK: "Pressure fell into the leak range — inspect the pipe and fittings.",
+  OVERFLOW: "Pressure exceeded the overflow limit — check tank levels and valves.",
+};
+
+async function renderIncidents() {
+  const seq = state.renderSeq;
+  mount("incidents-template");
+  const list = document.getElementById("incident-list");
+  list.innerHTML = `<p class="muted">Loading alerts…</p>`;
+
+  const { data, error } = await client
+    .from("alerts")
+    .select("*")
+    .in("device_id", state.devices.map((d) => d.id))
+    .order("triggered_at", { ascending: false })
+    .limit(200);
+
+  if (seq !== state.renderSeq) return;
+  if (error) {
+    console.error(error);
+    list.innerHTML = `<p class="muted">Couldn't load alerts. Please refresh.</p>`;
+    return;
+  }
+
+  const alerts = data || [];
+  const devicesById = new Map(state.devices.map((d) => [d.id, d]));
+  const openCount = alerts.filter((a) => a.status === "open").length;
+  setText("incident-summary", `${openCount} open · ${alerts.length} total`);
+  drawAlertsChart(alerts);
+
+  const renderList = (filter) => {
+    const shown = alerts.filter(
+      (a) => filter === "all" || (filter === "open" ? a.status === "open" : a.status !== "open")
+    );
+    list.innerHTML = shown.length
+      ? shown.map((a) => incidentCard(a, devicesById.get(a.device_id))).join("")
+      : `<p class="panel muted">No ${filter === "all" ? "" : `${filter} `}alerts — all clear.</p>`;
+  };
+
+  const tabs = appRoot.querySelectorAll("[data-filter]");
+  tabs.forEach((tab) =>
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.toggle("active", t === tab));
+      renderList(tab.dataset.filter);
+    })
+  );
+  renderList("all");
+}
+
+function incidentCard(alert, device) {
+  const isOpen = alert.status === "open";
+  const typeClass = alert.type === "OVERFLOW" ? "overflow" : "leak";
+  return `
+    <article class="panel incident-card ${isOpen ? "" : "cleared"}">
+      <div>
+        <span class="incident-type ${typeClass}">${esc(alert.type)}</span>
+        <h3>Pipe #${esc(device?.pipe_number ?? "?")} · Sensor ${esc(device?.sensor_id ?? "?")}</h3>
+        <p class="muted">${esc(ALERT_HINTS[alert.type] ?? "The sensor reported an abnormal reading.")}</p>
+      </div>
+      <div class="incident-meta">
+        <p>${esc(new Date(alert.triggered_at).toLocaleString())}</p>
+        <p class="incident-status ${isOpen ? "open" : "cleared"}">${isOpen ? "● Open" : `✓ ${esc(alert.status)}`}</p>
+      </div>
+    </article>`;
+}
+
 // ============================================================
 // GAUGE (canvas semicircle, no external gauge library needed)
 // ============================================================
-function drawGauge(value, min, max) {
+function drawGauge(value, range) {
   const canvas = document.getElementById("gauge-canvas");
+  if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const cx = canvas.width / 2;
-  const cy = canvas.height - 10;
-  const radius = 90;
+  const cy = canvas.height - 18;
+  const radius = Math.min(cx, cy) - 12;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // Background arc zones: green / yellow / red
   const zones = [
-    { from: 0, to: 0.6, color: "#22c55e" },
-    { from: 0.6, to: 0.85, color: "#eab308" },
-    { from: 0.85, to: 1, color: "#ef4444" },
+    { from: 0, to: 0.6, color: ZONE_COLORS.normal },
+    { from: 0.6, to: 0.85, color: ZONE_COLORS.warning },
+    { from: 0.85, to: 1, color: ZONE_COLORS.critical },
   ];
   zones.forEach((z) => {
     ctx.beginPath();
@@ -310,11 +593,16 @@ function drawGauge(value, min, max) {
     ctx.stroke();
   });
 
+  ctx.fillStyle = "#93a3b5";
+  ctx.font = "12px Inter, sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(String(range.min), cx - radius, cy + 16);
+  ctx.fillText(String(range.max), cx + radius, cy + 16);
+
   if (value === null || value === undefined) return;
 
   // Needle
-  const pct = Math.min(Math.max((value - min) / (max - min), 0), 1);
-  const angle = Math.PI + pct * Math.PI;
+  const angle = Math.PI + toPct(value, range) * Math.PI;
   ctx.beginPath();
   ctx.moveTo(cx, cy);
   ctx.lineTo(cx + Math.cos(angle) * (radius - 20), cy + Math.sin(angle) * (radius - 20));
@@ -333,68 +621,216 @@ function drawGauge(value, min, max) {
 // Mirrors the same pct-of-range logic the ESP32 uses for its
 // physical LEDs, so the web view and the hardware always agree.
 // ============================================================
-function updateLEDs(value, min, max) {
+function updateLEDs(value, range) {
   const leds = document.querySelectorAll("#led-strip .led");
-  if (value === null || value === undefined) {
-    leds.forEach((l) => (l.className = "led"));
-    return;
-  }
-
-  const pct = Math.min(Math.max((value - min) / (max - min), 0), 1);
-  const litCount = Math.round(pct * 5);
+  const hasValue = value !== null && value !== undefined;
+  const pct = hasValue ? toPct(value, range) : 0;
+  const litCount = hasValue ? Math.round(pct * 5) : 0;
+  const colour = pct > 0.85 ? "red" : pct > 0.6 ? "amber" : null;
 
   leds.forEach((led, i) => {
     led.className = "led";
     if (i < litCount) {
-      led.classList.add(pct > 0.85 ? "on-red" : pct > 0.6 ? "on-yellow" : "on-green");
+      led.classList.add("on");
+      if (colour) led.classList.add(colour);
     }
   });
 }
 
 // ============================================================
-// 24H HISTORY CHART (Chart.js)
+// CHARTS (Chart.js)
 // ============================================================
-let historyChartInstance = null;
+function addChart(canvasId, config) {
+  const chart = new Chart(document.getElementById(canvasId), config);
+  state.charts.push(chart);
+  return chart;
+}
 
-function drawHistoryChart(readings) {
-  const ctx = document.getElementById("history-chart");
-  const labels = readings.map((r) => new Date(r.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-  const values = readings.map((r) => r.value);
+function limitLine(label, value, color, length) {
+  return {
+    label,
+    limitValue: value,
+    data: Array(length).fill(value),
+    borderColor: color,
+    borderDash: [6, 4],
+    borderWidth: 1,
+    pointRadius: 0,
+    fill: false,
+  };
+}
 
-  if (historyChartInstance) historyChartInstance.destroy();
+function drawTrendChart(readings, range) {
+  const n = readings.length;
+  setText(
+    "trend-range",
+    n ? `${new Date(readings[0].timestamp).toLocaleString()} → ${new Date(readings[n - 1].timestamp).toLocaleString()}` : "No readings yet"
+  );
 
-  historyChartInstance = new Chart(ctx, {
+  return addChart("trend-chart", {
     type: "line",
     data: {
-      labels,
+      labels: readings.map((r) => fmtTime(r.timestamp)),
+      datasets: [
+        {
+          label: "Pressure (PSI)",
+          data: readings.map((r) => r.value),
+          borderColor: ZONE_COLORS.normal,
+          backgroundColor: "rgba(34, 197, 94, 0.10)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 0,
+          borderWidth: 2,
+        },
+        limitLine("Warning", zoneLimit(range, 0.6), ZONE_COLORS.warning, n),
+        limitLine("Critical", zoneLimit(range, 0.85), ZONE_COLORS.critical, n),
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: { legend: { labels: { boxWidth: 12, boxHeight: 2 } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, maxRotation: 0 }, grid: { display: false } },
+        y: { suggestedMin: range.min, suggestedMax: range.max, title: { display: true, text: "PSI" } },
+      },
+    },
+  });
+}
+
+function pushTrendPoint(chart, reading) {
+  chart.data.labels.push(fmtTime(reading.timestamp));
+  chart.data.datasets.forEach((ds) => ds.data.push(ds.limitValue ?? reading.value));
+  if (chart.data.labels.length > HISTORY_POINTS) {
+    chart.data.labels.shift();
+    chart.data.datasets.forEach((ds) => ds.data.shift());
+  }
+  chart.update("none");
+}
+
+function drawHourlyChart(readings, range) {
+  const buckets = new Map();
+  readings.forEach((r) => {
+    const hour = new Date(r.timestamp);
+    hour.setMinutes(0, 0, 0);
+    const bucket = buckets.get(hour.getTime()) ?? { sum: 0, count: 0 };
+    bucket.sum += r.value;
+    bucket.count += 1;
+    buckets.set(hour.getTime(), bucket);
+  });
+
+  const hours = [...buckets.keys()].sort((a, b) => a - b);
+  const averages = hours.map((h) => Number((buckets.get(h).sum / buckets.get(h).count).toFixed(1)));
+
+  addChart("hourly-chart", {
+    type: "bar",
+    data: {
+      labels: hours.map((h) => fmtTime(h)),
       datasets: [{
-        data: values,
-        borderColor: "#22c55e",
-        backgroundColor: "rgba(34, 197, 94, 0.08)",
-        fill: true,
-        tension: 0.3,
-        pointRadius: 0,
-        borderWidth: 2,
+        label: "Avg PSI",
+        data: averages,
+        backgroundColor: averages.map((v) => ZONE_COLORS[zoneOf(v, range)]),
+        borderRadius: 4,
       }],
     },
     options: {
       responsive: true,
+      maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: { ticks: { color: "#93a3b5", maxTicksLimit: 6 }, grid: { display: false } },
-        y: { ticks: { color: "#93a3b5" }, grid: { color: "#24405c" } },
+        x: { grid: { display: false }, ticks: { maxRotation: 0, maxTicksLimit: 12 } },
+        y: { suggestedMin: range.min, suggestedMax: range.max },
+      },
+    },
+  });
+}
+
+function drawZoneChart(readings, range) {
+  const counts = { normal: 0, warning: 0, critical: 0 };
+  readings.forEach((r) => counts[zoneOf(r.value, range)]++);
+  const total = readings.length || 1;
+  const zones = Object.keys(counts);
+
+  addChart("zone-chart", {
+    type: "doughnut",
+    data: {
+      labels: zones.map((z) => ZONE_LABELS[z]),
+      datasets: [{
+        data: zones.map((z) => counts[z]),
+        backgroundColor: zones.map((z) => ZONE_COLORS[z]),
+        borderColor: "#13233a",
+        borderWidth: 3,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: "65%",
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 12 } },
+        tooltip: {
+          callbacks: { label: (ctx) => ` ${ctx.label}: ${((ctx.raw / total) * 100).toFixed(1)}% of readings` },
+        },
+      },
+    },
+  });
+}
+
+function drawAlertsChart(alerts) {
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() - i);
+    days.push(day);
+  }
+  const countFor = (type) =>
+    days.map((day) =>
+      alerts.filter((a) => a.type === type && new Date(a.triggered_at).toDateString() === day.toDateString()).length
+    );
+
+  addChart("alerts-chart", {
+    type: "bar",
+    data: {
+      labels: days.map((d) => d.toLocaleDateString([], { weekday: "short", day: "numeric" })),
+      datasets: [
+        { label: "Leak", data: countFor("LEAK"), backgroundColor: ZONE_COLORS.critical, borderRadius: 4 },
+        { label: "Overflow", data: countFor("OVERFLOW"), backgroundColor: ZONE_COLORS.warning, borderRadius: 4 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } } },
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
       },
     },
   });
 }
 
 // ============================================================
-// NOTE — WSP fleet view:
-// This file always shows devices[0], which is correct for a
-// Home Owner (one device). A WSP account with many devices needs
-// a different page: loop over `devices`, render one row per device
-// in a table (matching the "Fleet Overview" wireframe), and link
-// each row to this same dashboard filtered by that device's id.
-// That's a good next step once this single-device flow is confirmed
-// working end-to-end.
+// HELPERS
 // ============================================================
+function mount(templateId) {
+  appRoot.innerHTML = "";
+  appRoot.appendChild(document.getElementById(templateId).content.cloneNode(true));
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function fmtTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function esc(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

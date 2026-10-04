@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
 <link rel="stylesheet" href="../styles/dashboard.css" />
 </head>
-<body class="dashboard-body">
+<body class="dashboard-body app-body">
 
 <div class="dashboard-video-bg" aria-hidden="true">
   <video autoplay muted loop playsinline preload="metadata">
@@ -15,26 +15,62 @@
   </video>
 </div>
 
-<header class="topbar">
-  <div class="topbar-brand">
-    <span class="brand-icon-sm">💧</span> AquaGuard
-  </div>
-  <button id="signout-btn" class="btn-ghost">Sign Out</button>
-</header>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon-sm">💧</span>
+      <div>
+        <strong>AquaGuard</strong>
+        <small>Water Monitoring</small>
+      </div>
+    </div>
 
-<main id="app-root" class="app-root">
-  <!-- Loading state -->
-  <div id="loading-state" class="center-msg">
-    <span class="spinner-lg"></span>
-    <p>Loading your account…</p>
+    <nav class="sidebar-nav" aria-label="Main">
+      <button type="button" class="nav-item active" data-view="monitor">📊 Dashboard</button>
+      <button type="button" class="nav-item" data-view="incidents">
+        <span>🚨 Incident Room</span>
+        <span id="nav-alert-count" class="nav-count hidden">0</span>
+      </button>
+      <button type="button" class="nav-item" data-view="pair">➕ Pair Device</button>
+    </nav>
+
+    <div class="sidebar-user">
+      <div class="avatar" id="user-avatar">?</div>
+      <div class="sidebar-user-text">
+        <p id="user-name">—</p>
+        <p id="user-role" class="muted">—</p>
+      </div>
+    </div>
+    <button id="signout-btn" class="btn-ghost">Sign Out</button>
+  </aside>
+
+  <div class="shell-main">
+    <header class="shell-topbar">
+      <div>
+        <h1 id="view-title">Primary Monitoring</h1>
+        <p class="muted" id="view-subtitle">Loading…</p>
+      </div>
+      <div class="topbar-actions">
+        <select id="device-select" class="device-select hidden" aria-label="Select device"></select>
+        <span id="online-badge" class="badge hidden">Checking…</span>
+      </div>
+    </header>
+
+    <main id="app-root" class="app-root shell-root">
+      <!-- Loading state -->
+      <div id="loading-state" class="center-msg">
+        <span class="spinner-lg"></span>
+        <p>Loading your account…</p>
+      </div>
+    </main>
   </div>
-</main>
+</div>
 
 <!-- ============ TEMPLATE: PAIRING SCREEN ============ -->
 <template id="pairing-template">
   <div class="pairing-card">
     <h2>Pair New Device</h2>
-    <p class="muted">Power on your AquaGuard device and enter the code shown on its display or serial output.</p>
+    <p class="muted">Enter the 6-digit code from your AquaGuard email (or the code shown on your device).</p>
 
     <div id="pairing-banner" class="status-banner hidden"></div>
 
@@ -71,49 +107,105 @@
   </div>
 </template>
 
-<!-- ============ TEMPLATE: DASHBOARD SCREEN ============ -->
+<!-- ============ TEMPLATE: MONITORING DASHBOARD ============ -->
 <template id="dashboard-template">
-  <div class="dash-grid">
+  <div class="monitor-grid">
 
-    <div id="alert-banner" class="alert-banner hidden"></div>
-
-    <div class="device-header">
-      <div>
-        <h2 id="device-title">Pipe #—</h2>
-        <p class="muted" id="device-subtitle">Sensor ID —</p>
-      </div>
-      <span id="online-badge" class="badge">● Checking…</span>
+    <div id="alert-banner" class="alert-banner danger span-all hidden">
+      <span id="alert-text"></span>
+      <button type="button" class="btn-ghost btn-small" data-goto="incidents">Open Incident Room</button>
     </div>
 
-    <div class="gauge-card">
+    <section class="panel gauge-panel">
+      <div class="panel-head">
+        <div>
+          <h2 id="device-title">Pipe #—</h2>
+          <p class="muted" id="device-subtitle">Sensor —</p>
+        </div>
+        <span id="zone-chip" class="zone-chip">—</span>
+      </div>
+
       <div class="gauge-wrap">
-        <canvas id="gauge-canvas" width="220" height="130"></canvas>
+        <canvas id="gauge-canvas" width="260" height="150"></canvas>
         <div class="gauge-readout">
           <span id="gauge-value">—</span>
           <span class="gauge-unit">PSI</span>
         </div>
       </div>
+
       <div class="led-strip" id="led-strip">
         <span class="led"></span><span class="led"></span><span class="led"></span><span class="led"></span><span class="led"></span>
       </div>
-    </div>
+      <p class="muted small-note" id="last-updated">—</p>
+    </section>
 
-    <div class="stat-row">
-      <div class="stat-card">
-        <p class="stat-label">Peak (Max)</p>
-        <p class="stat-value stat-red" id="stat-peak">—</p>
+    <div class="monitor-right">
+      <div class="kpi-grid">
+        <div class="kpi">
+          <p class="stat-label">Peak (Max)</p>
+          <p class="kpi-value stat-red" id="kpi-peak">—</p>
+        </div>
+        <div class="kpi">
+          <p class="stat-label">Baseline (Min)</p>
+          <p class="kpi-value stat-green" id="kpi-baseline">—</p>
+        </div>
+        <div class="kpi">
+          <p class="stat-label">Average</p>
+          <p class="kpi-value" id="kpi-average">—</p>
+        </div>
+        <div class="kpi">
+          <p class="stat-label">Open Alerts</p>
+          <p class="kpi-value" id="kpi-alerts">—</p>
+        </div>
       </div>
-      <div class="stat-card">
-        <p class="stat-label">Baseline (Min)</p>
-        <p class="stat-value stat-green" id="stat-baseline">—</p>
+
+      <section class="panel">
+        <div class="panel-head">
+          <p class="panel-title">24H Pressure Analytics</p>
+          <p class="muted small-note" id="trend-range"></p>
+        </div>
+        <div class="chart-box"><canvas id="trend-chart"></canvas></div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <p class="panel-title">Hourly Average Pressure</p>
+        <p class="muted small-note">Bars coloured by zone</p>
       </div>
+      <div class="chart-box short"><canvas id="hourly-chart"></canvas></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <p class="panel-title">Time in Each Zone</p>
+      </div>
+      <div class="chart-box short"><canvas id="zone-chart"></canvas></div>
+    </section>
+
+  </div>
+</template>
+
+<!-- ============ TEMPLATE: INCIDENT ROOM ============ -->
+<template id="incidents-template">
+  <div class="incident-room">
+    <div class="incident-toolbar">
+      <div class="filter-tabs" role="tablist">
+        <button type="button" class="active" data-filter="all">All</button>
+        <button type="button" data-filter="open">Open</button>
+        <button type="button" data-filter="cleared">Cleared</button>
+      </div>
+      <span class="muted" id="incident-summary"></span>
     </div>
 
-    <div class="chart-card">
-      <p class="stat-label">24H Pressure Analytics</p>
-      <canvas id="history-chart" height="90"></canvas>
-    </div>
+    <section class="panel">
+      <div class="panel-head">
+        <p class="panel-title">Alerts — Last 7 Days</p>
+      </div>
+      <div class="chart-box short"><canvas id="alerts-chart"></canvas></div>
+    </section>
 
+    <div id="incident-list" class="incident-list"></div>
   </div>
 </template>
 

@@ -27,7 +27,10 @@ Open this in VS Code and check items off (`[ ]` → `[x]`) as you go — the Mar
 - [x] Admin console page (`dashboard/admin.html` + `javascript/admin.js`): registered emails list, device-code table, assign form, per-code email handoff; admins are redirected here automatically on sign-in
 - [x] Synthetic demo data: `sql/synthetic_data.sql` seeds 8 devices, thresholds, 24h of readings and demo alerts
 - [ ] Turn "Confirm email" back ON before real users sign up (currently OFF for dev testing)
-- [ ] Run `sql/admin_panel_functions.sql` in Supabase (is_admin helper, admin list RPCs, admin RLS policies)
+- [ ] Run `sql/admin_panel_functions.sql` in Supabase (is_admin helper, admin-only list RPCs, admin RLS policies) — re-run after `admin_assign_device.sql`, it now needs `assigned_to`
+- [ ] Run `sql/make_admin.sql` (promotes justus.kamande@strathmore.edu + blocks users from giving themselves the Admin role)
+- [ ] Deploy the `send-device-code` Edge Function and set its secrets (`RESEND_API_KEY`, `EMAIL_FROM`, `SITE_URL`)
+- [x] Admin console emails codes through the Edge Function (Assign & email, or ✉ Email code per reserved code); lists Home Owner / WSP accounts with last sign-in
 - [ ] Re-run `sql/admin_assign_device.sql` v2 in Supabase (adds `assigned_to` column + exclusive claim policy)
 - [ ] Run `sql/synthetic_data.sql` in Supabase to seed the demo devices/readings
 - [ ] If an older claim policy exists under a different name, drop it so only "Accounts can claim their assigned devices" remains
@@ -40,7 +43,9 @@ Open this in VS Code and check items off (`[ ]` → `[x]`) as you go — the Mar
 - [x] `dashboard.html` / `dashboard.css` / `dashboard.js` — pairing screen + live dashboard
 - [ ] Paste real `SUPABASE_URL` / `SUPABASE_ANON_KEY` into **both** `auth.js` and `dashboard.js`
 - [ ] Test full loop end-to-end: sign up → confirm (if enabled) → sign in → pair device with test code → see gauge/chart populate
-- [ ] Build **Alerts page** (list view, matches "Incident Room" wireframe) — reads from `alerts` table, lets user mark alerts as read
+- [x] Visualization dashboard: sidebar layout, gauge + LEDs, KPIs, 24h trend with warning/critical lines, hourly averages, time-in-zone doughnut, device switcher for multi-device (WSP) accounts
+- [x] **Incident Room** (read-only): alert list with All/Open/Cleared filter + 7-day alerts chart
+- [ ] Incident Room: let user mark alerts as cleared (needs an `alerts` update RLS policy)
 - [ ] Build **Settings page** (matches "Control Hub" wireframe) — edit profile, view device info, sign out
 - [ ] Build **WSP Fleet Overview page** — table of all devices a WSP manages, reusing `dashboard.html` as the per-device drill-down (see note at bottom of `dashboard.js`)
 - [x] Add a `reset-password.html` page (the "Forgot password" email link currently points to a page that doesn't exist yet)
