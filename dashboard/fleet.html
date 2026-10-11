@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AquaGuard — Fleet Overview</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="stylesheet" href="../styles/dashboard.css" />
+</head>
+<body class="dashboard-body app-body">
+
+<div class="dashboard-video-bg" aria-hidden="true">
+  <video autoplay muted loop playsinline preload="metadata">
+    <source src="../Water_monitoring_dashboard_anima%E2%80%A6_20260930094007.mp4" type="video/mp4" />
+  </video>
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon-sm">💧</span>
+      <div><strong>AquaGuard</strong><small>WSP Console</small></div>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Main">
+      <button type="button" class="nav-item" onclick="location.href='dashboard.html'">📊 Single Device</button>
+      <button type="button" class="nav-item active">🗺️ Fleet Overview</button>
+      <button type="button" class="nav-item" onclick="location.href='settings.html'">⚙️ Settings</button>
+    </nav>
+
+    <button id="signout-btn" class="btn-ghost">Sign Out</button>
+  </aside>
+
+  <div class="shell-main">
+    <header class="shell-topbar">
+      <div>
+        <h1>Fleet Overview</h1>
+        <p class="muted">All devices you manage</p>
+      </div>
+      <span class="badge" id="fleet-count">—</span>
+    </header>
+
+    <main class="app-root shell-root">
+      <section class="panel">
+        <div class="panel-head">
+          <p class="panel-title">Your Devices</p>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Pipe</th>
+                <th>Sensor</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Last Reading</th>
+                <th>Open Alerts</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="fleet-tbody">
+              <tr><td colspan="7" class="muted">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../javascript/config.js"></script>
+<script src="../javascript/fleet.js"></script>
+</body>
+</html>

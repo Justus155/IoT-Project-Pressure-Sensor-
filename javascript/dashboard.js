@@ -119,10 +119,19 @@ async function fetchUserRole(client, userId) {
 
   fillSidebarUser(profile, sessionData.session.user.email);
   wireNavigation();
+  if (role === "wsp") document.getElementById("fleet-nav")?.classList.remove("hidden");
 
   if (!(await loadDevices())) {
     appRoot.innerHTML = `<p class="center-msg">Couldn't load your devices. Please refresh.</p>`;
     return;
+  }
+
+  // fleet.html links here with ?device=<id>.
+  const requestedId = new URLSearchParams(window.location.search).get("device");
+  const requestedDevice = state.devices.find((d) => d.id === requestedId);
+  if (requestedDevice) {
+    state.current = requestedDevice;
+    deviceSelect.value = requestedDevice.id;
   }
 
   // No device yet → the account still has to enter the code it was emailed.
