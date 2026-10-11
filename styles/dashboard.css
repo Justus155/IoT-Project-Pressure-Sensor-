@@ -1480,7 +1480,8 @@ body.app-body {
 }
 
 .admin-form input[type="email"],
-.admin-form input[type="text"] {
+.admin-form input[type="text"],
+.admin-form input[type="tel"] {
   padding: 12px 14px;
   border: 1.5px solid var(--border);
   border-radius: var(--radius-md);
@@ -1493,7 +1494,8 @@ body.app-body {
 }
 
 .admin-form input[type="email"]:focus,
-.admin-form input[type="text"]:focus {
+.admin-form input[type="text"]:focus,
+.admin-form input[type="tel"]:focus {
   border-color: var(--aqua-500);
   box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.15);
 }

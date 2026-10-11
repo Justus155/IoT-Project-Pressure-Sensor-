@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AquaGuard — Settings</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="stylesheet" href="../styles/dashboard.css" />
+</head>
+<body class="dashboard-body app-body">
+
+<div class="dashboard-video-bg" aria-hidden="true">
+  <video autoplay muted loop playsinline preload="metadata">
+    <source src="../Water_monitoring_dashboard_anima%E2%80%A6_20260930094007.mp4" type="video/mp4" />
+  </video>
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon-sm">💧</span>
+      <div><strong>AquaGuard</strong><small>Water Monitoring</small></div>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Main">
+      <button type="button" class="nav-item" onclick="location.href='dashboard.html'">📊 Dashboard</button>
+      <button type="button" class="nav-item" onclick="location.href='dashboard.html#incidents'">🚨 Incident Room</button>
+      <button type="button" class="nav-item" onclick="location.href='dashboard.html#pair'">➕ Pair Device</button>
+      <button type="button" class="nav-item active">⚙️ Settings</button>
+    </nav>
+
+    <div class="sidebar-user">
+      <div class="avatar" id="user-avatar">?</div>
+      <div class="sidebar-user-text">
+        <p id="user-name">—</p>
+        <p id="user-role" class="muted">—</p>
+      </div>
+    </div>
+    <button id="signout-btn" class="btn-ghost">Sign Out</button>
+  </aside>
+
+  <div class="shell-main">
+    <header class="shell-topbar">
+      <div>
+        <h1>Settings</h1>
+        <p class="muted">Manage your account and view device info</p>
+      </div>
+    </header>
+
+    <main class="app-root shell-root">
+      <section class="panel" style="max-width: 640px; margin: 0 auto;">
+        <div class="panel-head"><p class="panel-title">Account</p></div>
+
+        <div class="admin-form">
+          <label for="settings-email">Email</label>
+          <input type="email" id="settings-email" disabled />
+
+          <label for="settings-name">Name</label>
+          <input type="text" id="settings-name" />
+
+          <label for="settings-phone">Phone</label>
+          <input type="tel" id="settings-phone" />
+
+          <label for="settings-role">Role</label>
+          <input type="text" id="settings-role" disabled />
+
+          <button type="button" class="btn-primary" id="save-profile-btn">
+            <span class="btn-label">Save Changes</span>
+            <span class="spinner hidden"></span>
+          </button>
+        </div>
+
+        <div id="settings-banner" class="status-banner hidden" style="margin-top: 16px;"></div>
+      </section>
+
+      <section class="panel" style="max-width: 640px; margin: 24px auto 0;">
+        <div class="panel-head"><p class="panel-title">Your Devices</p></div>
+        <div id="devices-list" class="muted">Loading…</div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../javascript/config.js"></script>
+<script src="../javascript/settings.js"></script>
+</body>
+</html>

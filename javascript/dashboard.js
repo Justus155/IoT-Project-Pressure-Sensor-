@@ -1,18 +1,15 @@
 // ============================================================
 // AquaGuard — Dashboard
-// Same Supabase keys as auth.js. In a larger app these would live
-// in one shared config file; kept duplicated here for simplicity.
+// Supabase keys live in config.js.
 // ============================================================
 
-const SUPABASE_URL = "https://vtsqsqpkatarmfsntjoi.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ0c3FzcXBrYXRhcm1mc250am9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MjEzMzYsImV4cCI6MjEwNTI5NzMzNn0.cQrDvMbfcA7_OPScc13LAt1OwKEEkSNubLl8_nbDNVQ";
+import { redeemPairingCode, wireCodeInputs } from "./pair.js";
 
 let client = null;
 try {
-  const { createClient } = supabase;
-  client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  client = window.createAquaGuardClient();
 } catch (err) {
-  console.error("Supabase failed to initialize — check keys in dashboard.js", err);
+  console.error("Supabase failed to initialize — check keys in config.js", err);
 }
 
 const appRoot = document.getElementById("app-root");
@@ -89,7 +86,7 @@ async function fetchUserRole(client, userId) {
 // ============================================================
 (async function init() {
   if (!client) {
-    appRoot.innerHTML = `<p class="center-msg">Supabase isn't configured. Set your keys in dashboard.js.</p>`;
+    appRoot.innerHTML = `<p class="center-msg">Supabase isn't configured. Set your keys in config.js.</p>`;
     return;
   }
 
@@ -130,7 +127,10 @@ async function fetchUserRole(client, userId) {
 
   // No device yet → the account still has to enter the code it was emailed.
   refreshAlertCount();
-  showView(state.devices.length ? "monitor" : "pair");
+  // settings.html links here with #incidents / #pair.
+  const requested = window.location.hash.slice(1);
+  const startView = VIEW_TEXT[requested] ? requested : "monitor";
+  showView(state.devices.length ? startView : "pair");
 })();
 
 // ============================================================
@@ -255,34 +255,17 @@ function renderPairingScreen(showManualFallback = false) {
   appRoot.innerHTML = "";
   appRoot.appendChild(template.content.cloneNode(true));
 
-  const digits = document.querySelectorAll(".code-digit");
-  digits.forEach((input, i) => {
-    input.addEventListener("input", () => {
-      input.value = input.value.replace(/[^0-9]/g, "");
-      if (input.value && digits[i + 1]) digits[i + 1].focus();
-    });
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Backspace" && !input.value && digits[i - 1]) {
-        digits[i - 1].focus();
-      }
-    });
-  });
-  digits[0].focus();
-
   const form = document.getElementById("pairing-form");
   const pairBtn = document.getElementById("pair-btn");
   const banner = document.getElementById("pairing-banner");
 
+  const codeInputs = wireCodeInputs(form);
+  codeInputs.focus();
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const code = Array.from(digits).map((d) => d.value).join("");
-
-    if (code.length !== 6) {
-      showPairingBanner(banner, "Enter the full 6-digit code.", "error");
-      return;
-    }
-
-    await claimDeviceByCode(code, banner, pairBtn);
+    const paired = await claimDeviceByCode(codeInputs.getValue(), banner, pairBtn);
+    if (!paired) codeInputs.clear();
   });
 
   // ---------- Manual fallback (admin assigned the code already) ----------
@@ -299,55 +282,30 @@ function renderPairingScreen(showManualFallback = false) {
 
     manualForm.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const code = document.getElementById("manual-pair-code").value.trim();
-
-      if (!/^[0-9]{6}$/.test(code)) {
-        showPairingBanner(banner, "Enter the full 6-digit code.", "error");
-        return;
-      }
-
+      const code = document.getElementById("manual-pair-code").value;
       await claimDeviceByCode(code, banner, document.getElementById("manual-pair-btn"));
     });
   }
 }
 
-// Shared claim logic for both the digit-box form and the manual
-// fallback form. Only succeeds if a device row with this exact code
-// exists AND is still unclaimed (owner_id is null) — the RLS policy
-// enforces the "unclaimed" half; .eq("pairing_code") enforces the
-// code match itself.
+// Shared by the digit-box form and the manual fallback form.
 async function claimDeviceByCode(code, banner, btn) {
   setPairBtnLoading(btn, true);
-
-  const { data: sessionData } = await client.auth.getSession();
-  const userId = sessionData.session.user.id;
-
-  const { data, error } = await client
-    .from("devices")
-    .update({ owner_id: userId })
-    .eq("pairing_code", code)
-    .is("owner_id", null)
-    .select();
-
+  const result = await redeemPairingCode(client, code);
   setPairBtnLoading(btn, false);
 
-  if (error) {
-    showPairingBanner(banner, "Something went wrong. Please try again.", "error");
-    console.error(error);
-    return;
-  }
-
-  if (!data || data.length === 0) {
-    showPairingBanner(banner, "Invalid code, or this device is already paired to another account.", "error");
-    return;
+  if (!result.ok) {
+    showPairingBanner(banner, result.message, "error");
+    return false;
   }
 
   showPairingBanner(banner, "Device paired! Loading your dashboard…", "success");
   await loadDevices();
-  state.current = state.devices.find((d) => d.id === data[0].id) ?? data[0];
+  state.current = state.devices.find((d) => d.id === result.device.id) ?? result.device;
   deviceSelect.value = state.current.id;
   refreshAlertCount();
   setTimeout(() => showView("monitor"), 700);
+  return true;
 }
 
 function showPairingBanner(banner, message, type) {

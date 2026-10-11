@@ -4,14 +4,11 @@
 // else is bounced to the sign-in page.
 // ============================================================
 
-const SUPABASE_URL = "https://vtsqsqpkatarmfsntjoi.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ0c3FzcXBrYXRhcm1mc250am9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MjEzMzYsImV4cCI6MjEwNTI5NzMzNn0.cQrDvMbfcA7_OPScc13LAt1OwKEEkSNubLl8_nbDNVQ";
-
 let client = null;
 try {
-  client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  client = window.createAquaGuardClient();
 } catch (err) {
-  console.error("Supabase failed to initialize — check keys in admin.js", err);
+  console.error("Supabase failed to initialize — check keys in config.js", err);
 }
 
 const appRoot = document.getElementById("app-root");
@@ -66,7 +63,7 @@ async function fetchUserRole(client, userId) {
 // ============================================================
 (async function init() {
   if (!client) {
-    appRoot.innerHTML = `<p class="center-msg">Supabase isn't configured. Set your keys in admin.js.</p>`;
+    appRoot.innerHTML = `<p class="center-msg">Supabase isn't configured. Set your keys in config.js.</p>`;
     return;
   }
 
