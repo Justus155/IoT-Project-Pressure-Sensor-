@@ -1,0 +1,29 @@
+{
+    "configurations": [
+        {
+            "name": "ESP32 (Arduino)",
+            "compilerPath": "${env:LOCALAPPDATA}/Arduino15/packages/esp32/tools/esp-x32/2601/bin/xtensa-esp32-elf-g++.exe",
+            "cppStandard": "gnu++2b",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${env:LOCALAPPDATA}/Arduino15/packages/esp32/hardware/esp32/3.3.11/cores/esp32",
+                "${env:LOCALAPPDATA}/Arduino15/packages/esp32/hardware/esp32/3.3.11/variants/esp32",
+                "${env:LOCALAPPDATA}/Arduino15/packages/esp32/hardware/esp32/3.3.11/libraries/**",
+                "${env:LOCALAPPDATA}/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/include/**",
+                "${env:LOCALAPPDATA}/Arduino15/packages/esp32/tools/esp32-libs/3.3.11/qio_qspi/include",
+                "${env:USERPROFILE}/OneDrive/Documents/Arduino/libraries/**"
+            ],
+            "forcedInclude": [
+                "${env:LOCALAPPDATA}/Arduino15/packages/esp32/hardware/esp32/3.3.11/cores/esp32/Arduino.h"
+            ],
+            "defines": [
+                "ARDUINO=10607",
+                "ARDUINO_ESP32_DEV",
+                "ARDUINO_ARCH_ESP32",
+                "ESP32",
+                "ESP_PLATFORM"
+            ]
+        }
+    ],
+    "version": 4
+}
