@@ -203,12 +203,7 @@ forms.signup.addEventListener('submit', async (event) => {
     password,
     options: {
       emailRedirectTo: window.location.origin + window.location.pathname,
-      data: {
-        name: fullName,
-        full_name: fullName,
-        phone,
-        role
-      }
+      data: { name: fullName, full_name: fullName, phone, role }
     }
   });
 
@@ -218,9 +213,9 @@ forms.signup.addEventListener('submit', async (event) => {
     return;
   }
 
-  // Create the profile row ourselves (don't rely on a trigger).
-  // The `ignoreDuplicates: true` flag guarantees we never overwrite
-  // an existing admin's role if they re-signup with the same email.
+  // Try to create the profile client-side. The DB trigger should
+  // have already done this — so any error here is likely a
+  // "duplicate key" and we can safely ignore it.
   const { error: profileError } = await supabaseClient
     .from('profiles')
     .upsert(
@@ -233,12 +228,27 @@ forms.signup.addEventListener('submit', async (event) => {
       { onConflict: 'id', ignoreDuplicates: true }
     );
 
+  // Even if the upsert failed, check whether the profile now exists
+  // (created by the DB trigger). If it does, we're fine.
+  let profileExists = false;
+  if (data.session) {
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('id')
+      .eq('id', data.user.id)
+      .maybeSingle();
+    profileExists = !!profile;
+  }
+
   setFormLoading(forms.signup, false);
 
-  if (profileError) {
+  // Without a session (email confirmation pending) RLS blocks both the
+  // upsert and the check, so only treat it as a failure when we could verify.
+  if (profileError && data.session && !profileExists) {
     console.error('Profile creation failed:', profileError);
     showStatus(
-      'Account created, but saving your profile failed. Open the browser console (F12) for details.',
+      'Account created, but your profile could not be saved. ' +
+        'Please contact your administrator or try signing in — the account exists.',
       'error'
     );
     return;
@@ -249,7 +259,10 @@ forms.signup.addEventListener('submit', async (event) => {
     return;
   }
 
-  showStatus('Account created. Check your email to confirm your account, then sign in.', 'success');
+  showStatus(
+    'Account created. Check your email to confirm your account, then sign in.',
+    'success'
+  );
   switchTab('signin');
 });
 

@@ -59,6 +59,24 @@ async function fetchUserRole(client, userId) {
 }
 
 // ============================================================
+// SIGN OUT — wired immediately so it works even while loading
+// ============================================================
+document.getElementById("signout-btn").addEventListener("click", async (event) => {
+  event.currentTarget.disabled = true;
+  try {
+    if (client) {
+      const { error } = await client.auth.signOut();
+      // Server call failed (e.g. offline) — still drop the local session.
+      if (error) await client.auth.signOut({ scope: "local" });
+    }
+  } catch (err) {
+    console.error("Sign out failed:", err);
+  } finally {
+    window.location.href = "../logins/index.html";
+  }
+});
+
+// ============================================================
 // ENTRY POINT — admin-only guard
 // ============================================================
 (async function init() {
@@ -168,11 +186,6 @@ function renderAdminConsole() {
   });
 
   refreshBtn.addEventListener("click", refreshData);
-
-  document.getElementById("signout-btn").addEventListener("click", async () => {
-    if (client) await client.auth.signOut();
-    window.location.href = "../logins/index.html";
-  });
 }
 
 // ============================================================
