@@ -56,6 +56,36 @@
       </div>
     </section>
 
+    <!-- ============ REGISTERED ACCOUNTS ============ -->
+    <section class="admin-card-panel">
+      <div class="admin-section-head">
+        <h2>Home Owner &amp; WSP Accounts <span id="accounts-count" class="badge">0</span></h2>
+        <select id="role-filter" class="filter-select" aria-label="Filter by role">
+          <option value="all">All roles</option>
+          <option value="HomeOwner">Home Owners</option>
+          <option value="WSP">WSPs</option>
+        </select>
+      </div>
+      <p class="muted">Everyone who has signed up as a Home Owner or Water Service Provider, with their last sign-in and the codes reserved for them.</p>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Last Sign-in</th>
+              <th>Pending Codes</th>
+              <th>Paired</th>
+              <th class="th-actions">Action</th>
+            </tr>
+          </thead>
+          <tbody id="accounts-tbody"><!-- filled by admin.js --></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- ============ ASSIGN DEVICE (EMAIL + CODE) ============ -->
     <section class="admin-card-panel">
       <h2>Assign Device Access</h2>
@@ -132,36 +162,6 @@
           <tbody id="pairing-codes-tbody">
             <tr><td colspan="6" class="muted">Loading…</td></tr>
           </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- ============ REGISTERED ACCOUNTS ============ -->
-    <section class="admin-card-panel">
-      <div class="admin-section-head">
-        <h2>Home Owner &amp; WSP Accounts <span id="accounts-count" class="badge">0</span></h2>
-        <select id="role-filter" class="filter-select" aria-label="Filter by role">
-          <option value="all">All roles</option>
-          <option value="HomeOwner">Home Owners</option>
-          <option value="WSP">WSPs</option>
-        </select>
-      </div>
-      <p class="muted">Everyone who has signed up as a Home Owner or Water Service Provider, with their last sign-in and the codes reserved for them.</p>
-
-      <div class="admin-table-wrap">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Email</th>
-              <th>Name</th>
-              <th>Role</th>
-              <th>Last Sign-in</th>
-              <th>Pending Codes</th>
-              <th>Paired</th>
-              <th class="th-actions">Action</th>
-            </tr>
-          </thead>
-          <tbody id="accounts-tbody"><!-- filled by admin.js --></tbody>
         </table>
       </div>
     </section>
