@@ -250,10 +250,11 @@ async function refreshAlertCount() {
 function fillSidebarUser(profile, email) {
   const name = profile?.name || email.split("@")[0];
   const initials = name.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2);
-  setText("user-name", name);
+  setText("user-name", email);
   const userRole = String(profile?.role ?? "").trim().toLowerCase();
   setText("user-role", userRole === "wsp" ? "Water Service Provider" : "Home Owner");
   setText("user-avatar", initials.toUpperCase() || "?");
+  document.getElementById("user-name")?.setAttribute("title", email);
 }
 
 // ============================================================
