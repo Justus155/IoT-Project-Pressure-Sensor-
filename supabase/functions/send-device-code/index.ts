@@ -60,7 +60,9 @@ Deno.serve(async (req) => {
     .select("role")
     .eq("id", caller.user.id)
     .maybeSingle();
-  if (profile?.role !== "Admin") return json({ error: "Only administrators can send device codes." }, 403);
+  if (String(profile?.role ?? "").trim().toLowerCase() !== "admin") {
+    return json({ error: "Only administrators can send device codes." }, 403);
+  }
 
   // ---------- Device + recipient come from the database ----------
   let deviceId: unknown;

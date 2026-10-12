@@ -68,8 +68,9 @@ begin
   insert into public.sensor_readings (device_id, value, timestamp)
   values (dev_id, round(p_value, 1), now());
 
-  update public.devices set status = 'active'
-   where id = dev_id and status is distinct from 'active';
+  update public.devices
+     set status = (jsonb_populate_record(null::public.devices, '{"status":"active"}')).status
+   where id = dev_id and status::text is distinct from 'active';
 end;
 $$;
 
@@ -85,21 +86,32 @@ as $$
 declare
   dev_id uuid := public._device_auth(p_sensor_id, p_device_code);
   alert_type text := upper(trim(p_type));
+  alert_user uuid;
 begin
   if alert_type not in ('LEAK', 'OVERFLOW') then
     raise exception 'Unknown alert type';
   end if;
 
+  select coalesce(owner_id, assigned_to) into alert_user
+    from public.devices where id = dev_id;
+
+  if alert_user is null then
+    raise exception 'Device is not paired to an account yet';
+  end if;
+
   -- One open alert per type per device; repeats are ignored.
   if exists (
     select 1 from public.alerts
-     where device_id = dev_id and type = alert_type and status = 'open'
+     where device_id = dev_id and type::text = alert_type and status::text = 'open'
   ) then
     return;
   end if;
 
-  insert into public.alerts (device_id, type, status, triggered_at)
-  values (dev_id, alert_type, 'open', now());
+  -- jsonb_populate_record casts to the column types, which may be enums.
+  insert into public.alerts (device_id, user_id, type, status, triggered_at)
+  select dev_id, alert_user, r.type, r.status, now()
+    from jsonb_populate_record(null::public.alerts,
+           jsonb_build_object('type', alert_type, 'status', 'open')) as r;
 end;
 $$;
 
@@ -115,10 +127,10 @@ declare
   dev_id uuid := public._device_auth(p_sensor_id, p_device_code);
 begin
   update public.alerts
-     set status = 'cleared'
+     set status = (jsonb_populate_record(null::public.alerts, '{"status":"cleared"}')).status
    where device_id = dev_id
-     and type = upper(trim(p_type))
-     and status = 'open';
+     and type::text = upper(trim(p_type))
+     and status::text = 'open';
 end;
 $$;
 

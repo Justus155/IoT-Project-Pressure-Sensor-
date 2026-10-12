@@ -453,13 +453,27 @@ async function sendCodeEmail(deviceId) {
       const body = await error.context?.json();
       if (body?.error) message = body.error;
     } catch {
-      // Non-JSON error body (e.g. function not deployed) — keep the default message.
+      // Non-JSON error body — keep default message
     }
     console.error("send-device-code failed:", error);
     return { ok: false, message };
   }
 
-  return { ok: true, sentTo: data.sent_to };
+  // The function may return a JSON object OR a JSON-stringified object
+  // depending on how Supabase's client parses the response.
+  let payload = data;
+  if (typeof payload === "string") {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      console.warn("Could not parse function response:", payload);
+    }
+  }
+
+  const sentTo = payload?.sent_to ?? "(email sent — recipient not returned)";
+  console.log("send-device-code response:", payload);
+
+  return { ok: true, sentTo };
 }
 
 // ============================================================

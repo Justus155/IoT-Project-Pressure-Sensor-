@@ -1,0 +1,4 @@
+project_id = "vtsqsqpkatarmfsntjoi"
+
+[functions.send-device-code]
+verify_jwt = false
