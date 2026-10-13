@@ -15,21 +15,13 @@ const appRoot = document.getElementById("app-root");
 const state = {
   accounts: [],
   devices: [],
-  pairingCodes: [],
+  pairingCodes: [],   // left empty — pairing_codes table not used
   stats: { userCount: 0, deviceCount: 0, alertCount: 0, pendingCodes: 0 },
   roleFilter: "all"
 };
 
 // ------------------------------------------------------------
-// Resolve the signed-in user's role.
-// 1) Read the account's own profiles row. If RLS hides it (missing
-//    SELECT policy) or the row is missing, .maybeSingle() returns
-//    null WITHOUT an error — that silent failure is what used to
-//    bounce admins off this console.
-// 2) Fall back to the SECURITY DEFINER is_admin() RPC, which bypasses
-//    RLS on profiles.
-// The role is compared case-insensitively everywhere, so 'admin',
-// 'ADMIN' or ' Admin ' in the table can never break routing again.
+// Role resolution (case-insensitive, with is_admin() fallback)
 // ------------------------------------------------------------
 async function fetchUserRole(client, userId) {
   const { data: profile, error: profileError } = await client
@@ -59,14 +51,13 @@ async function fetchUserRole(client, userId) {
 }
 
 // ============================================================
-// SIGN OUT — wired immediately so it works even while loading
+// SIGN OUT
 // ============================================================
 document.getElementById("signout-btn").addEventListener("click", async (event) => {
   event.currentTarget.disabled = true;
   try {
     if (client) {
       const { error } = await client.auth.signOut();
-      // Server call failed (e.g. offline) — still drop the local session.
       if (error) await client.auth.signOut({ scope: "local" });
     }
   } catch (err) {
@@ -106,7 +97,6 @@ document.getElementById("signout-btn").addEventListener("click", async (event) =
 
   const role = await fetchUserRole(client, userId);
   if (role !== "admin") {
-    // Signed in, but not an admin — they belong on the normal dashboard.
     window.location.href = "dashboard.html";
     return;
   }
@@ -194,11 +184,9 @@ function renderAdminConsole() {
 async function refreshData() {
   const banner = document.getElementById("admin-banner");
 
-  // Run all fetches in parallel for speed
   const [
     accountsRes,
     devicesRes,
-    codesRes,
     statsRes,
     userCountRes,
     deviceCountRes,
@@ -209,27 +197,25 @@ async function refreshData() {
     client.rpc("admin_list_accounts"),
     // 2. RPC — devices with pairing status
     client.rpc("admin_list_devices"),
-    // 3. Pairing codes — full history
-    client
-      .from("pairing_codes")
-      .select("*")
-      .order("created_at", { ascending: false }),
-    // 4. Combined stats RPC (optional — see SQL below)
+    // 3. Combined stats RPC (optional)
     client.rpc("admin_system_stats").maybeSingle(),
-    // 5. Exact count — total users
+    // 4. Total users
     client.from("profiles").select("*", { count: "exact", head: true }),
-    // 6. Exact count — total devices
+    // 5. Total devices
     client.from("devices").select("*", { count: "exact", head: true }),
-    // 7. Exact count — open alerts
+    // 6. Open alerts
     client
       .from("alerts")
       .select("*", { count: "exact", head: true })
       .eq("status", "open"),
-    // 8. Exact count — pending pairing codes
+    // 7. Pending codes = devices that are assigned but not yet claimed.
+    //    This replaces the old pairing_codes query, which relied on a
+    //    table that doesn't exist in this project.
     client
-      .from("pairing_codes")
+      .from("devices")
       .select("*", { count: "exact", head: true })
-      .eq("status", "pending")
+      .not("assigned_to", "is", null)
+      .is("owner_id", null)
   ]);
 
   // ---------- Handle accounts ----------
@@ -252,13 +238,8 @@ async function refreshData() {
   }
   state.devices = devicesRes.data || [];
 
-  // ---------- Handle pairing codes ----------
-  if (codesRes.error) {
-    console.warn("Couldn't load pairing codes:", codesRes.error.message);
-    state.pairingCodes = [];
-  } else {
-    state.pairingCodes = codesRes.data || [];
-  }
+  // ---------- pairing_codes: always empty ----------
+  state.pairingCodes = [];
 
   // ---------- Handle stats ----------
   state.stats = {
@@ -271,7 +252,7 @@ async function refreshData() {
   renderStats();
   renderCodesTable();
   renderAccountsTable();
-  renderPairingCodesTable(); // Optional — see below
+  renderPairingCodesTable(); // will just show the empty-state row
   fillDatalists();
 }
 
@@ -350,35 +331,13 @@ function renderCodesTable() {
 }
 
 // ============================================================
-// OPTIONAL: PAIRING CODES HISTORY TABLE
+// PAIRING CODES HISTORY TABLE (always empty now)
 // ============================================================
 function renderPairingCodesTable() {
   const tbody = document.getElementById("pairing-codes-tbody");
-  if (!tbody) return; // Table not in HTML — skip silently
+  if (!tbody) return;
 
-  if (state.pairingCodes.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">No pairing codes generated yet.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = state.pairingCodes
-    .map((c) => {
-      const statusClass = c.status === "used"
-        ? "online"
-        : c.status === "expired"
-          ? "offline"
-          : "assigned";
-      return `
-        <tr>
-          <td><span class="code-chip">${esc(c.code)}</span></td>
-          <td>${esc(c.recipient_email ?? "—")}</td>
-          <td><span class="badge ${statusClass}">${esc(c.status)}</span></td>
-          <td>${c.expires_at ? esc(new Date(c.expires_at).toLocaleString()) : "—"}</td>
-          <td>${c.used_at ? esc(new Date(c.used_at).toLocaleString()) : '<span class="muted">—</span>'}</td>
-          <td>${c.created_at ? esc(new Date(c.created_at).toLocaleString()) : "—"}</td>
-        </tr>`;
-    })
-    .join("");
+  tbody.innerHTML = `<tr><td colspan="6" class="muted">Pairing-code history is now tracked on the Device Codes table above (Awaiting pairing / Paired).</td></tr>`;
 }
 
 // ============================================================
@@ -439,8 +398,7 @@ function fillDatalists() {
 }
 
 // ============================================================
-// EMAIL — calls the send-device-code Edge Function, which looks up
-// the reserved account's address itself and sends via Resend.
+// EMAIL — calls the send-device-code Edge Function
 // ============================================================
 async function sendCodeEmail(deviceId) {
   const { data, error } = await client.functions.invoke("send-device-code", {
@@ -459,8 +417,6 @@ async function sendCodeEmail(deviceId) {
     return { ok: false, message };
   }
 
-  // The function may return a JSON object OR a JSON-stringified object
-  // depending on how Supabase's client parses the response.
   let payload = data;
   if (typeof payload === "string") {
     try {

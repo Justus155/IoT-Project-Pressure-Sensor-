@@ -32,7 +32,7 @@ const state = {
   devices: [],
   current: null,
   view: "monitor",
-  renderSeq: 0, // bumps on every view change so stale async renders bail out
+  renderSeq: 0,
   channel: null,
   charts: [],
 };
@@ -44,15 +44,7 @@ if (window.Chart) {
 }
 
 // ------------------------------------------------------------
-// Resolve the signed-in user's role.
-// 1) Read the account's own profiles row. If RLS hides it (missing
-//    SELECT policy) or the row is missing, .maybeSingle() returns
-//    null WITHOUT an error — that silent failure is what used to
-//    let admins onto this homeowner dashboard.
-// 2) Fall back to the SECURITY DEFINER is_admin() RPC, which bypasses
-//    RLS on profiles.
-// The role is compared case-insensitively everywhere, so 'admin',
-// 'ADMIN' or ' Admin ' in the table can never break routing again.
+// Role resolution (case-insensitive, with is_admin() fallback)
 // ------------------------------------------------------------
 async function fetchUserRole(client, userId) {
   const { data: profile, error: profileError } = await client
@@ -112,7 +104,6 @@ async function fetchUserRole(client, userId) {
 
   const role = await fetchUserRole(client, state.userId);
   if (role === "admin") {
-    // Admins have a dedicated console — never the homeowner dashboard.
     window.location.href = "admin.html";
     return;
   }
@@ -134,12 +125,22 @@ async function fetchUserRole(client, userId) {
     deviceSelect.value = requestedDevice.id;
   }
 
-  // No device yet → the account still has to enter the code it was emailed.
   refreshAlertCount();
+
+  // No device yet → force the pairing screen, no matter what the hash says
+  if (state.devices.length === 0) {
+    renderPairingScreen(true);
+    setText("view-title", "Pair New Device");
+    setText("view-subtitle", "Enter the 6-digit code your admin emailed you.");
+    deviceSelect.classList.add("hidden");
+    onlineBadge.classList.add("hidden");
+    return;
+  }
+
   // settings.html links here with #incidents / #pair.
   const requested = window.location.hash.slice(1);
   const startView = VIEW_TEXT[requested] ? requested : "monitor";
-  showView(state.devices.length ? startView : "pair");
+  showView(startView);
 })();
 
 // ============================================================
@@ -156,10 +157,12 @@ document.getElementById("signout-btn").addEventListener("click", async () => {
 function wireNavigation() {
   navItems.forEach((btn) => btn.addEventListener("click", () => showView(btn.dataset.view)));
 
-  deviceSelect.addEventListener("change", () => {
-    state.current = state.devices.find((d) => d.id === deviceSelect.value) ?? state.current;
-    showView("monitor");
-  });
+  if (deviceSelect) {
+    deviceSelect.addEventListener("change", () => {
+      state.current = state.devices.find((d) => d.id === deviceSelect.value) ?? state.current;
+      showView("monitor");
+    });
+  }
 
   appRoot.addEventListener("click", (event) => {
     const target = event.target.closest("[data-goto]");
@@ -168,7 +171,9 @@ function wireNavigation() {
 }
 
 function showView(view) {
-  if (view !== "pair" && !state.current) view = "pair";
+  // Safety: no device + non-pair view → force pair
+  if (!state.current && view !== "pair") view = "pair";
+
   state.view = view;
   state.renderSeq += 1;
   teardownLiveView();
@@ -215,18 +220,21 @@ async function loadDevices() {
     state.current = state.devices[0] ?? null;
   }
 
-  deviceSelect.innerHTML = "";
-  state.devices.forEach((d) => {
-    const option = document.createElement("option");
-    option.value = d.id;
-    option.textContent = `Pipe #${d.pipe_number} · ${d.sensor_id}`;
-    deviceSelect.appendChild(option);
-  });
-  if (state.current) deviceSelect.value = state.current.id;
+  if (deviceSelect) {
+    deviceSelect.innerHTML = "";
+    state.devices.forEach((d) => {
+      const option = document.createElement("option");
+      option.value = d.id;
+      option.textContent = `Pipe #${d.pipe_number} · ${d.sensor_id}`;
+      deviceSelect.appendChild(option);
+    });
+    if (state.current) deviceSelect.value = state.current.id;
+  }
   return true;
 }
 
 async function refreshAlertCount() {
+  if (!navAlertCount) return;
   const ids = state.devices.map((d) => d.id);
   if (ids.length === 0) {
     navAlertCount.classList.add("hidden");
@@ -262,6 +270,10 @@ function fillSidebarUser(profile, email) {
 // ============================================================
 function renderPairingScreen(showManualFallback = false) {
   const template = document.getElementById("pairing-template");
+  if (!template) {
+    appRoot.innerHTML = `<p class="center-msg">Pairing template missing from dashboard.html.</p>`;
+    return;
+  }
   appRoot.innerHTML = "";
   appRoot.appendChild(template.content.cloneNode(true));
 
@@ -278,7 +290,6 @@ function renderPairingScreen(showManualFallback = false) {
     if (!paired) codeInputs.clear();
   });
 
-  // ---------- Manual fallback (admin assigned the code already) ----------
   const manualToggle = document.getElementById("manual-pair-toggle");
   const manualForm = document.getElementById("manual-pair-form");
 
@@ -298,7 +309,6 @@ function renderPairingScreen(showManualFallback = false) {
   }
 }
 
-// Shared by the digit-box form and the manual fallback form.
 async function claimDeviceByCode(code, banner, btn) {
   setPairBtnLoading(btn, true);
   const result = await redeemPairingCode(client, code);
@@ -311,8 +321,8 @@ async function claimDeviceByCode(code, banner, btn) {
 
   showPairingBanner(banner, "Device paired! Loading your dashboard…", "success");
   await loadDevices();
-  state.current = state.devices.find((d) => d.id === result.device.id) ?? result.device;
-  deviceSelect.value = state.current.id;
+  state.current = state.devices.find((d) => d.id === result.device.id) ?? state.devices[0];
+  if (deviceSelect) deviceSelect.value = state.current?.id ?? "";
   refreshAlertCount();
   setTimeout(() => showView("monitor"), 700);
   return true;
@@ -333,6 +343,14 @@ function setPairBtnLoading(btn, isLoading) {
 // MONITORING DASHBOARD
 // ============================================================
 async function renderDashboard(device) {
+  // Defensive: no device → show pairing screen instead of crashing
+  if (!device) {
+    renderPairingScreen(true);
+    setText("view-title", "Pair New Device");
+    setText("view-subtitle", "Enter the 6-digit code your admin emailed you.");
+    return;
+  }
+
   const seq = state.renderSeq;
   mount("dashboard-template");
 
@@ -343,8 +361,6 @@ async function renderDashboard(device) {
   onlineBadge.textContent = isOnline ? "Online" : "Offline";
   onlineBadge.className = `badge ${isOnline ? "online" : "offline"}`;
 
-  // Latest 288 readings rather than "since 24h ago", so seeded demo
-  // data still draws a full day even if it was inserted days earlier.
   const [thresholdsRes, readingsRes, alertsRes] = await Promise.all([
     client.from("thresholds").select("*").eq("device_id", device.id),
     client
@@ -382,7 +398,7 @@ async function renderDashboard(device) {
   drawHourlyChart(readings, range);
   drawZoneChart(readings, range);
 
-  // ---------- Live updates ----------
+  // Live updates
   state.channel = client
     .channel(`device-${device.id}`)
     .on(
@@ -449,7 +465,6 @@ function showAlertBanner(alert, device) {
   document.getElementById("alert-banner")?.classList.remove("hidden");
 }
 
-// Same 60% / 85% bands as the gauge, LEDs and ESP32 firmware.
 function toPct(value, range) {
   const span = range.max - range.min || 1;
   return Math.min(Math.max((value - range.min) / span, 0), 1);
@@ -535,7 +550,7 @@ function incidentCard(alert, device) {
 }
 
 // ============================================================
-// GAUGE (canvas semicircle, no external gauge library needed)
+// GAUGE
 // ============================================================
 function drawGauge(value, range) {
   const canvas = document.getElementById("gauge-canvas");
@@ -547,7 +562,6 @@ function drawGauge(value, range) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Background arc zones: green / yellow / red
   const zones = [
     { from: 0, to: 0.6, color: ZONE_COLORS.normal },
     { from: 0.6, to: 0.85, color: ZONE_COLORS.warning },
@@ -569,7 +583,6 @@ function drawGauge(value, range) {
 
   if (value === null || value === undefined) return;
 
-  // Needle
   const angle = Math.PI + toPct(value, range) * Math.PI;
   ctx.beginPath();
   ctx.moveTo(cx, cy);
@@ -586,8 +599,6 @@ function drawGauge(value, range) {
 
 // ============================================================
 // 5-LED STRIP
-// Mirrors the same pct-of-range logic the ESP32 uses for its
-// physical LEDs, so the web view and the hardware always agree.
 // ============================================================
 function updateLEDs(value, range) {
   const leds = document.querySelectorAll("#led-strip .led");
@@ -606,10 +617,12 @@ function updateLEDs(value, range) {
 }
 
 // ============================================================
-// CHARTS (Chart.js)
+// CHARTS
 // ============================================================
 function addChart(canvasId, config) {
-  const chart = new Chart(document.getElementById(canvasId), config);
+  const el = document.getElementById(canvasId);
+  if (!el) return null;
+  const chart = new Chart(el, config);
   state.charts.push(chart);
   return chart;
 }
@@ -667,6 +680,7 @@ function drawTrendChart(readings, range) {
 }
 
 function pushTrendPoint(chart, reading) {
+  if (!chart) return;
   chart.data.labels.push(fmtTime(reading.timestamp));
   chart.data.datasets.forEach((ds) => ds.data.push(ds.limitValue ?? reading.value));
   if (chart.data.labels.length > HISTORY_POINTS) {
