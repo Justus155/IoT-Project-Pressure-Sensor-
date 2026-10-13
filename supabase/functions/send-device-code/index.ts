@@ -1,17 +1,17 @@
 // ============================================================
 // AquaGuard — send-device-code (Supabase Edge Function)
-// Emails a device pairing code to the account it is reserved for.
-// The browser only sends a device_id; the recipient, code and pipe
-// details are read from the database, and only Admins may call it.
+// Emails a device pairing code via Gmail SMTP.
 //
-// Secrets (supabase secrets set ...):
-//   RESEND_API_KEY  — API key from https://resend.com
-//   EMAIL_FROM      — e.g. "AquaGuard <alerts@your-verified-domain.com>"
-//   SITE_URL        — e.g. "https://your-site.example" (sign-in link base)
-// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
+// Secrets (set via `supabase secrets set ...`):
+//   GMAIL_USER      — your full Gmail / Workspace address
+//   GMAIL_APP_PASS  — 16-char App Password from Google Account
+//   SITE_URL        — base URL for the sign-in link (optional)
+//
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are auto-injected.
 // ============================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -38,10 +38,15 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  const resendKey = Deno.env.get("RESEND_API_KEY");
-  if (!resendKey) return json({ error: "Email is not configured: set the RESEND_API_KEY secret." }, 500);
-
-  const emailFrom = Deno.env.get("EMAIL_FROM") ?? "AquaGuard <onboarding@resend.dev>";
+  // ---------- Environment ----------
+  const gmailUser = Deno.env.get("GMAIL_USER");
+  const gmailPass = Deno.env.get("GMAIL_APP_PASS");
+  if (!gmailUser || !gmailPass) {
+    return json(
+      { error: "Email is not configured: set GMAIL_USER and GMAIL_APP_PASS secrets." },
+      500,
+    );
+  }
   const siteUrl = (Deno.env.get("SITE_URL") ?? req.headers.get("origin") ?? "").replace(/\/+$/, "");
 
   const admin = createClient(
@@ -83,11 +88,17 @@ Deno.serve(async (req) => {
 
   if (deviceError || !device) return json({ error: "Device not found." }, 404);
   if (device.owner_id) return json({ error: "That device is already paired." }, 409);
-  if (!device.assigned_to) return json({ error: "Assign this code to an account before emailing it." }, 409);
+  if (!device.assigned_to) {
+    return json({ error: "Assign this code to an account before emailing it." }, 409);
+  }
 
-  const { data: target, error: targetError } = await admin.auth.admin.getUserById(device.assigned_to);
+  const { data: target, error: targetError } = await admin.auth.admin.getUserById(
+    device.assigned_to,
+  );
   const recipient = target?.user?.email;
-  if (targetError || !recipient) return json({ error: "The assigned account has no email address." }, 404);
+  if (targetError || !recipient) {
+    return json({ error: "The assigned account has no email address." }, 404);
+  }
 
   const { data: targetProfile } = await admin
     .from("profiles")
@@ -95,7 +106,7 @@ Deno.serve(async (req) => {
     .eq("id", device.assigned_to)
     .maybeSingle();
 
-  // ---------- Compose + send ----------
+  // ---------- Compose the email ----------
   const greetingName = targetProfile?.name || recipient.split("@")[0];
   const signInUrl = siteUrl ? `${siteUrl}/logins/index.html` : "";
   const subject = `Your AquaGuard device code: ${device.pairing_code}`;
@@ -129,17 +140,32 @@ Deno.serve(async (req) => {
       <p style="color:#93a3b5;font-size:13px">This code only works for your account. If you did not expect this email, you can ignore it.</p>
     </div>`;
 
-  const resendRes = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: emailFrom, to: [recipient], subject, text, html }),
+  // ---------- Send via Gmail SMTP ----------
+  const smtp = new SMTPClient({
+    connection: {
+      hostname: "smtp.gmail.com",
+      port: 465,
+      tls: true,
+      auth: {
+        username: gmailUser,
+        password: gmailPass,
+      },
+    },
   });
 
-  if (!resendRes.ok) {
-    const detail = await resendRes.text();
-    console.error("Resend rejected the email:", resendRes.status, detail);
-    return json({ error: `Email provider rejected the message (${resendRes.status}): ${detail}` }, 502);
+  try {
+    await smtp.send({
+      from: `AquaGuard <${gmailUser}>`,
+      to: recipient,
+      subject,
+      content: text,
+      html,
+    });
+    await smtp.close();
+    return json({ sent_to: recipient });
+  } catch (err) {
+    console.error("SMTP send failed:", err);
+    await smtp.close().catch(() => {});
+    return json({ error: `Email failed: ${(err as Error).message}` }, 502);
   }
-
-  return json({ sent_to: recipient });
 });
