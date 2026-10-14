@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AquaGuard — Dashboard</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="stylesheet" href="../styles/dashboard.css" />
+</head>
+<body class="dashboard-body app-body">
+
+<div class="app-shell">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon-sm">💧</span>
+      <div>
+        <strong>AquaGuard</strong>
+        <small>Water Monitoring</small>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button type="button" class="nav-item active">📊 Dashboard</button>
+    </nav>
+
+    <div class="sidebar-user">
+      <div class="avatar" id="user-avatar">?</div>
+      <div class="sidebar-user-text">
+        <p id="user-name">—</p>
+        <p id="user-role" class="muted">—</p>
+      </div>
+    </div>
+    <button id="signout-btn" class="btn-ghost">Sign Out</button>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div class="shell-main">
+    <header class="shell-topbar">
+      <div>
+        <h1 id="view-title">AquaGuard — Live Monitoring</h1>
+        <p class="muted" id="view-subtitle">Pressure · Zone · Alerts</p>
+      </div>
+      <div class="topbar-actions">
+        <span id="online-badge" class="badge online">● Live (simulated)</span>
+      </div>
+    </header>
+
+    <main id="app-root" class="app-root">
+      <!-- The dashboard renders here -->
+    </main>
+  </div>
+</div>
+
+<!-- ============================================================
+     TEMPLATE: PAIRING SCREEN
+     ============================================================ -->
+<template id="pairing-template">
+  <div class="pairing-card">
+    <h2>Pair New Device</h2>
+    <p class="muted">Enter the 6-digit code your admin emailed you.</p>
+
+    <div id="pairing-banner" class="status-banner hidden"></div>
+
+    <form id="pairing-form" class="pairing-form">
+      <div class="code-inputs" id="code-inputs">
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+      </div>
+
+      <button type="submit" class="btn-primary" id="pair-btn">
+        <span class="btn-label">Provision &amp; Connect</span>
+        <span class="spinner hidden"></span>
+      </button>
+    </form>
+  </div>
+</template>
+
+<!-- ============================================================
+     TEMPLATE: DASHBOARD (matches wireframe)
+     ============================================================ -->
+<template id="dashboard-template">
+  <div class="dash-layout">
+
+    <!-- ALERT BANNER -->
+    <div id="alert-banner" class="alert-banner hidden">
+      <span id="alert-text"></span>
+    </div>
+
+    <!-- ==== ROW 1: GAUGE + KPIs ==== -->
+    <section class="card gauge-card">
+      <div class="card-head">
+        <h2 id="device-title">PRESSURE MONITOR READING</h2>
+        <span id="zone-chip" class="zone-chip warning">WARNING STAGE</span>
+      </div>
+
+      <canvas id="gauge-canvas" width="280" height="170"></canvas>
+
+      <div class="live-telemetry">
+        <span>LIVE TELEMETRY</span>
+        <span class="warning-label">CRITICAL WARNING Threshold</span>
+        <strong><span id="gauge-value">84.3</span> PSI</strong>
+      </div>
+    </section>
+
+    <section class="card kpi-card">
+      <div class="kpi">
+        <span>PEAK (MAX)</span>
+        <strong id="kpi-peak" class="danger">94.8 PSI</strong>
+      </div>
+      <div class="kpi">
+        <span>BASELINE (MIN)</span>
+        <strong id="kpi-baseline" class="ok">12.1 PSI</strong>
+      </div>
+      <div class="kpi">
+        <span>INTERNAL TEMP</span>
+        <strong id="kpi-temp">74.2 °C</strong>
+      </div>
+      <div class="kpi">
+        <span>FLOW RATE</span>
+        <strong id="kpi-flow">4.20 m³/h</strong>
+      </div>
+    </section>
+
+    <!-- ==== ROW 2: TREND CHART (full width) ==== -->
+    <section class="card trend-card">
+      <div class="card-head">
+        <h3>24H Pressure Analytics</h3>
+        <span id="trend-range" class="muted">Last 24 hours</span>
+      </div>
+      <canvas id="trend-chart" height="140"></canvas>
+    </section>
+
+    <!-- ==== ROW 3: IDE + FUNCTIONS (full width) ==== -->
+    <section class="card ide-card">
+      <div class="card-head">
+        <h3>ESP32 Leakage Visual and Thresholds</h3>
+        <span class="badge live">● ESP32: Connected</span>
+      </div>
+
+      <pre class="code-block"><code><span class="c">// ESP32 Leakage Monitoring Setup</span>
+<span class="k">#include</span> <span class="s">&lt;WiFi.h&gt;</span>
+<span class="k">#include</span> <span class="s">"ThingSpeak.h"</span>
+<span class="k">const char*</span> ssid = <span class="s">"IoT_Net"</span>;
+<span class="k">unsigned long</span> channelID = <span class="n">24819</span>;
+<span class="k">int</span> THRESHOLD_RAW = <span class="n">600</span>;
+
+<span class="k">void</span> <span class="f">setup</span>() {
+  Serial.<span class="f">begin</span>(<span class="n">115200</span>);
+  WiFi.<span class="f">begin</span>(ssid, pass);
+  ThingSpeak.<span class="f">begin</span>(client);
+}
+
+<span class="k">void</span> <span class="f">loop</span>() {
+  <span class="k">int</span> raw = <span class="f">analogRead</span>(<span class="n">34</span>);
+  <span class="k">float</span> psi = <span class="f">convertToPSI</span>(raw);
+  <span class="f">checkLeakage</span>(psi);
+}</code></pre>
+
+      <table class="func-table">
+        <thead>
+          <tr><th>Function Name</th><th>Simulated Value</th><th>Threshold</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>readPressureRaw()</td>
+            <td id="fn-raw">512</td>
+            <td>600</td>
+            <td><span class="pill ok">OK</span></td>
+          </tr>
+          <tr>
+            <td>convertToPSI()</td>
+            <td id="fn-psi">7.5 PSI</td>
+            <td>10.0 PSI</td>
+            <td><span class="pill ok">OK</span></td>
+          </tr>
+          <tr>
+            <td>checkLeakage()</td>
+            <td id="fn-leak" class="danger">No Leak</td>
+            <td>Leak Detected</td>
+            <td><span class="pill safe">Safe</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ==== ROW 4: LEDs + HOURLY ==== -->
+    <section class="card led-card">
+      <div class="card-head">
+        <h3>Pressure Indicator LEDs</h3>
+      </div>
+      <div class="led-strip" id="led-strip">
+        <span class="led"></span><span class="led"></span><span class="led"></span>
+        <span class="led"></span><span class="led"></span>
+      </div>
+      <p class="muted small-note" id="last-updated">Updated just now</p>
+    </section>
+
+    <section class="card hourly-card">
+      <div class="card-head">
+        <h3>Hourly Average Pressure</h3>
+        <span class="muted small-note">Bars coloured by zone</span>
+      </div>
+      <canvas id="hourly-chart" height="140"></canvas>
+    </section>
+
+  </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../javascript/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script type="module" src="../javascript/dashboard.js"></script>
+</body>
+</html>

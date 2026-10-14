@@ -1,5 +1,5 @@
 // ============================================================
-// AquaGuard — Dashboard
+// AquaGuard — Dashboard (WSP + Home Owner router)
 // Supabase keys live in config.js.
 // ============================================================
 
@@ -29,6 +29,7 @@ const VIEW_TEXT = {
 
 const state = {
   userId: null,
+  userRole: null,
   devices: [],
   current: null,
   view: "monitor",
@@ -82,13 +83,16 @@ async function fetchUserRole(client, userId) {
     return;
   }
 
-  const { data: sessionData } = await client.auth.getSession();
-  if (!sessionData.session) {
+  // Use getUser() — validates against the server and always returns the
+  // correct user, even right after a page refresh (getSession() can
+  // return null if the local session hasn't hydrated yet).
+  const { data: { user }, error: userError } = await client.auth.getUser();
+  if (userError || !user) {
     window.location.href = "../logins/index.html";
     return;
   }
 
-  state.userId = sessionData.session.user.id;
+  state.userId = user.id;
 
   const { data: profile, error: profileError } = await client
     .from("profiles")
@@ -103,12 +107,31 @@ async function fetchUserRole(client, userId) {
   }
 
   const role = await fetchUserRole(client, state.userId);
+  state.userRole = role;
+
   if (role === "admin") {
     window.location.href = "admin.html";
     return;
   }
 
-  fillSidebarUser(profile, sessionData.session.user.email);
+  // ---------------- Role-based routing ----------------
+  // Redirect WSPs to the WSP dashboard and Home Owners to the Home
+  // dashboard. The `path.includes(...)` guard prevents an infinite
+  // redirect loop if the user is already on the right page.
+  const path = window.location.pathname.toLowerCase();
+
+  if (role === "wsp" && !path.includes("dashboard-wsp")) {
+    window.location.href = "dashboard-wsp.html";
+    return;
+  }
+
+  if (role !== "wsp" && !path.includes("dashboard-home") && !path.includes("dashboard-wsp")) {
+    // Only redirect Home Owners if this page is NOT already the home page.
+    // (When running on dashboard-wsp.html as a Home Owner, we fall through
+    // below and just render the monitoring view.)
+  }
+
+  fillSidebarUser(profile, user.email);
   wireNavigation();
   if (role === "wsp") document.getElementById("fleet-nav")?.classList.remove("hidden");
 
@@ -122,18 +145,18 @@ async function fetchUserRole(client, userId) {
   const requestedDevice = state.devices.find((d) => d.id === requestedId);
   if (requestedDevice) {
     state.current = requestedDevice;
-    deviceSelect.value = requestedDevice.id;
+    if (deviceSelect) deviceSelect.value = requestedDevice.id;
   }
 
   refreshAlertCount();
 
-  // No device yet → force the pairing screen, no matter what the hash says
+  // No device yet → force the pairing screen
   if (state.devices.length === 0) {
     renderPairingScreen(true);
     setText("view-title", "Pair New Device");
     setText("view-subtitle", "Enter the 6-digit code your admin emailed you.");
-    deviceSelect.classList.add("hidden");
-    onlineBadge.classList.add("hidden");
+    deviceSelect?.classList.add("hidden");
+    onlineBadge?.classList.add("hidden");
     return;
   }
 
@@ -186,8 +209,8 @@ function showView(view) {
   const [title, subtitle] = VIEW_TEXT[view];
   setText("view-title", title);
   setText("view-subtitle", subtitle);
-  deviceSelect.classList.toggle("hidden", view !== "monitor" || state.devices.length < 2);
-  onlineBadge.classList.toggle("hidden", view !== "monitor");
+  deviceSelect?.classList.toggle("hidden", view !== "monitor" || state.devices.length < 2);
+  onlineBadge?.classList.toggle("hidden", view !== "monitor");
 
   if (view === "pair") renderPairingScreen(true);
   else if (view === "incidents") renderIncidents();
@@ -309,6 +332,9 @@ function renderPairingScreen(showManualFallback = false) {
   }
 }
 
+// ============================================================
+// FIXED: claimDeviceByCode
+// ============================================================
 async function claimDeviceByCode(code, banner, btn) {
   setPairBtnLoading(btn, true);
   const result = await redeemPairingCode(client, code);
@@ -320,11 +346,30 @@ async function claimDeviceByCode(code, banner, btn) {
   }
 
   showPairingBanner(banner, "Device paired! Loading your dashboard…", "success");
+
+  // Reload the device list — the RPC already set owner_id, so this now
+  // returns the newly-claimed device.
   await loadDevices();
-  state.current = state.devices.find((d) => d.id === result.device.id) ?? state.devices[0];
-  if (deviceSelect) deviceSelect.value = state.current?.id ?? "";
+
+  // Match by device_id (what the RPC returns), then fall back to first
+  const pairedId = result.device?.device_id ?? result.device?.id;
+  state.current =
+    state.devices.find((d) => d.id === pairedId) ??
+    state.devices[0] ??
+    null;
+
+  if (deviceSelect && state.current) {
+    deviceSelect.value = state.current.id;
+  }
+
   refreshAlertCount();
-  setTimeout(() => showView("monitor"), 700);
+
+  // Give the success banner a beat, then render the dashboard
+  setTimeout(() => {
+    state.renderSeq = 0;
+    showView("monitor");
+  }, 700);
+
   return true;
 }
 
@@ -343,13 +388,21 @@ function setPairBtnLoading(btn, isLoading) {
 // MONITORING DASHBOARD
 // ============================================================
 async function renderDashboard(device) {
-  // Defensive: no device → show pairing screen instead of crashing
+  // If no device was passed, try the first from the loaded list
+  if (!device) {
+    device = state.devices[0] ?? null;
+  }
+
+  // If we still have nothing, show the pairing screen
   if (!device) {
     renderPairingScreen(true);
     setText("view-title", "Pair New Device");
     setText("view-subtitle", "Enter the 6-digit code your admin emailed you.");
     return;
   }
+
+  // Make sure state is consistent
+  state.current = device;
 
   const seq = state.renderSeq;
   mount("dashboard-template");
@@ -358,8 +411,10 @@ async function renderDashboard(device) {
   setText("device-subtitle", `Sensor ${device.sensor_id} · ${device.type ?? "pressure"} sensor`);
 
   const isOnline = device.status === "active";
-  onlineBadge.textContent = isOnline ? "Online" : "Offline";
-  onlineBadge.className = `badge ${isOnline ? "online" : "offline"}`;
+  if (onlineBadge) {
+    onlineBadge.textContent = isOnline ? "Online" : "Offline";
+    onlineBadge.className = `badge ${isOnline ? "online" : "offline"}`;
+  }
 
   const [thresholdsRes, readingsRes, alertsRes] = await Promise.all([
     client.from("thresholds").select("*").eq("device_id", device.id),

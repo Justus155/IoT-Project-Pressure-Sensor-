@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AquaGuard — My Tank</title>
+<link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+<link rel="stylesheet" href="../styles/dashboard.css" />
+</head>
+<body class="dashboard-body app-body">
+
+<div class="app-shell">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon-sm">💧</span>
+      <div>
+        <strong>AquaGuard</strong>
+        <small>Tank Monitor</small>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button type="button" class="nav-item active">🏠 My Tank</button>
+      <button type="button" class="nav-item" id="history-nav">📜 History</button>
+      <button type="button" class="nav-item" id="alerts-nav">
+        <span>🔔 Alerts</span>
+        <span id="nav-alert-count" class="nav-count hidden">0</span>
+      </button>
+      <button type="button" class="nav-item" id="pair-nav">➕ Add Another Tank</button>
+    </nav>
+
+    <div class="sidebar-user">
+      <div class="avatar" id="user-avatar">?</div>
+      <div class="sidebar-user-text">
+        <p id="user-name">—</p>
+        <p id="user-role" class="muted">Home Owner</p>
+      </div>
+    </div>
+    <button id="signout-btn" class="btn-ghost">Sign Out</button>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div class="shell-main">
+    <header class="shell-topbar">
+      <div>
+        <h1 id="view-title">My Tank</h1>
+        <p class="muted" id="view-subtitle">Live level · Status · Alerts</p>
+      </div>
+      <div class="topbar-actions">
+        <select id="device-select" class="device-select hidden" aria-label="Select tank"></select>
+        <span id="online-badge" class="badge online">● Live</span>
+      </div>
+    </header>
+
+    <main id="app-root" class="app-root">
+      <!-- The dashboard renders here -->
+    </main>
+  </div>
+</div>
+
+<!-- ============================================================
+     TEMPLATE: PAIRING SCREEN
+     ============================================================ -->
+<template id="pairing-template">
+  <div class="pairing-card">
+    <h2>Pair Your Tank</h2>
+    <p class="muted">Enter the 6-digit code your admin emailed you.</p>
+
+    <div id="pairing-banner" class="status-banner hidden"></div>
+
+    <form id="pairing-form" class="pairing-form">
+      <div class="code-inputs" id="code-inputs">
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+        <input type="text" maxlength="1" inputmode="numeric" class="code-digit" />
+      </div>
+
+      <button type="submit" class="btn-primary" id="pair-btn">
+        <span class="btn-label">Connect My Tank</span>
+        <span class="spinner hidden"></span>
+      </button>
+    </form>
+  </div>
+</template>
+
+<!-- ============================================================
+     TEMPLATE: HOME DASHBOARD
+     ============================================================ -->
+<template id="home-template">
+  <div class="home-layout">
+
+    <!-- ALERT BANNER -->
+    <div id="alert-banner" class="alert-banner hidden">
+      <span id="alert-text"></span>
+    </div>
+
+    <!-- HERO: BIG TANK GAUGE -->
+    <section class="card home-hero">
+      <div class="card-head">
+        <div>
+          <h2 id="device-title">My Water Tank</h2>
+          <p class="muted small-note" id="device-subtitle">Pipe — · Sensor —</p>
+        </div>
+        <span id="status-chip" class="status-chip safe">● SAFE</span>
+      </div>
+
+      <div class="hero-gauge-wrap">
+        <canvas id="hero-gauge" width="360" height="220"></canvas>
+        <div class="hero-gauge-readout">
+          <span id="hero-percent">—</span>
+          <span class="hero-percent-symbol">%</span>
+        </div>
+        <p class="hero-status-text" id="hero-status-text">Waiting for data…</p>
+      </div>
+
+      <div class="tank-bar">
+        <div class="tank-bar-fill" id="tank-bar-fill" style="width: 0%"></div>
+        <div class="tank-bar-threshold low" style="left: 20%"></div>
+        <div class="tank-bar-threshold high" style="left: 80%"></div>
+      </div>
+
+      <div class="hero-footer">
+        <span><strong id="hero-psi">—</strong> PSI</span>
+        <span>·</span>
+        <span id="last-updated">Waiting…</span>
+      </div>
+    </section>
+
+    <!-- KPI CARDS -->
+    <div class="home-kpi-grid">
+      <div class="card kpi">
+        <span class="kpi-label">Current</span>
+        <strong class="kpi-value" id="kpi-current">—</strong>
+        <span class="kpi-sub" id="kpi-current-sub">of tank capacity</span>
+      </div>
+      <div class="card kpi">
+        <span class="kpi-label">Peak today</span>
+        <strong class="kpi-value" id="kpi-peak">—</strong>
+        <span class="kpi-sub">highest level</span>
+      </div>
+      <div class="card kpi">
+        <span class="kpi-label">Low today</span>
+        <strong class="kpi-value" id="kpi-low">—</strong>
+        <span class="kpi-sub">lowest level</span>
+      </div>
+      <div class="card kpi">
+        <span class="kpi-label">Trend</span>
+        <strong class="kpi-value" id="kpi-trend">—</strong>
+        <span class="kpi-sub" id="kpi-trend-sub">based on last hour</span>
+      </div>
+    </div>
+
+    <!-- 24H CHART -->
+    <section class="card home-chart-card">
+      <div class="card-head">
+        <h3>Level — last 24 hours</h3>
+        <span id="trend-range" class="muted small-note"></span>
+      </div>
+      <div class="home-chart-box">
+        <canvas id="home-trend-chart"></canvas>
+      </div>
+    </section>
+
+    <!-- RECENT ACTIVITY -->
+    <section class="card home-activity-card">
+      <div class="card-head">
+        <h3>Recent activity</h3>
+      </div>
+      <ul class="activity-list" id="activity-list">
+        <li class="muted">No activity yet.</li>
+      </ul>
+    </section>
+
+  </div>
+</template>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../javascript/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script type="module" src="../javascript/homeowner.js"></script>
+</body>
+</html>
